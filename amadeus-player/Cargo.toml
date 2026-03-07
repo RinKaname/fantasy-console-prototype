@@ -1,0 +1,12 @@
+[package]
+name = "amadeus-player"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+amadeus-engine = { path = "../amadeus-engine" }
+pixels.workspace = true
+winit.workspace = true
+winit_input_helper.workspace = true
+env_logger.workspace = true
+log.workspace = true
