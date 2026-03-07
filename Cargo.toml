@@ -1,0 +1,15 @@
+[workspace]
+
+resolver = "2"
+
+members = [
+    "amadeus-engine",
+    "amadeus-player"
+]
+
+[workspace.dependencies]
+pixels = "0.13"
+winit = "0.28" # winit 0.28 is compatible with pixels 0.13
+winit_input_helper = "0.14" # 0.14 is compatible with winit 0.28
+env_logger = "0.11"
+log = "0.4"
