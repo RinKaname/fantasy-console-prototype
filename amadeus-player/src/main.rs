@@ -11,6 +11,14 @@ use winit_input_helper::WinitInputHelper;
 fn main() -> Result<(), Error> {
     env_logger::init();
 
+    // Parse command line arguments to determine which cartridge to load
+    let args: Vec<String> = std::env::args().collect();
+    let cart_path = if args.len() > 1 {
+        args[1].clone()
+    } else {
+        "carts/snake.lua".to_string()
+    };
+
     // Load configuration
     let config: Config = std::fs::read_to_string("config.json")
         .ok()
@@ -23,7 +31,6 @@ fn main() -> Result<(), Error> {
     info!("Starting Amadeus with resolution: {}x{}", config.width, config.height);
 
     // Scale the window up so it's visible on modern monitors
-    // E.g., 256x240 * 3 = 768x720 window
     let scale_factor = 3.0;
 
     let event_loop = EventLoop::new();
@@ -45,15 +52,23 @@ fn main() -> Result<(), Error> {
         Pixels::new(config.width as u32, config.height as u32, surface_texture)?
     };
 
-    let mut engine = Engine::new(config);
+    let mut engine = Engine::new(config.clone());
 
-    // Load the test cartridge
-    let test_cartridge = include_str!("../cart.lua");
-    engine.load_cartridge(test_cartridge);
+    // Load the initial cartridge dynamically from disk
+    info!("Loading cartridge from: {}", cart_path);
+    if let Ok(lua_code) = std::fs::read_to_string(&cart_path) {
+        engine.load_cartridge(&lua_code);
+    } else {
+        error!("Failed to load cartridge: {}. Make sure the file exists.", cart_path);
+    }
 
-    // Load the spritesheet into Sprite RAM
-    let sprites_bytes = include_bytes!("../sprites.png");
-    engine.load_spritesheet(sprites_bytes);
+    // Attempt to load the spritesheet if it exists in the current directory
+    if let Ok(sprites_bytes) = std::fs::read("sprites.png") {
+        engine.load_spritesheet(&sprites_bytes);
+        info!("Loaded sprites.png into Sprite RAM.");
+    } else {
+        info!("No sprites.png found in root directory.");
+    }
 
     let mut last_frame = Instant::now();
 
@@ -87,6 +102,21 @@ fn main() -> Result<(), Error> {
                     error!("pixels.resize_surface() failed: {err}");
                     *control_flow = ControlFlow::Exit;
                     return;
+                }
+            }
+
+            // F5 Hot-Swapping Key
+            if input.key_pressed(VirtualKeyCode::F5) {
+                info!("Reloading cartridge: {}", cart_path);
+                if let Ok(lua_code) = std::fs::read_to_string(&cart_path) {
+                    engine.reload_cartridge(&lua_code, config.clone());
+
+                    // Reload sprites just in case they changed
+                    if let Ok(sprites_bytes) = std::fs::read("sprites.png") {
+                        engine.load_spritesheet(&sprites_bytes);
+                    }
+                } else {
+                    error!("Failed to reload cartridge: {}.", cart_path);
                 }
             }
 

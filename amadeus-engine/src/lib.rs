@@ -211,6 +211,22 @@ impl Engine {
         }
     }
 
+    /// Completely reinitializes the Engine with a new configuration and Lua environment.
+    /// Useful for hot-swapping cartridges without restarting the host application.
+    pub fn reload_cartridge(&mut self, lua_code: &str, config: Config) {
+        let console = Rc::new(RefCell::new(Console::new(config)));
+        let lua = Lua::new();
+
+        if let Err(e) = api::setup_lua_sandbox(&lua, Rc::clone(&console)) {
+            log::error!("Failed to setup Lua sandbox on reload: {}", e);
+        }
+
+        self.console = console;
+        self.lua = lua;
+
+        self.load_cartridge(lua_code);
+    }
+
     /// Expose spritesheet loading to the host layer
     pub fn load_spritesheet(&mut self, bytes: &[u8]) {
         self.console.borrow_mut().load_spritesheet(bytes);
