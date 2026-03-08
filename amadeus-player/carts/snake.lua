@@ -20,7 +20,7 @@ score = 0
 game_over = false
 
 -- Input debouncing
-last_btn_z = false
+last_action_btn = false
 
 -- Timing
 tick_rate = 6 -- Move every N frames (60/6 = 10 moves per second)
@@ -61,15 +61,17 @@ function place_apple()
 end
 
 function _update()
-    local z_pressed = btn(4)
+    -- Check if ANY action button is pressed (Z, X, Enter, Shift)
+    local action_pressed = btn(4) or btn(5) or btn(6) or btn(7)
+
     if game_over then
-        if z_pressed and not last_btn_z then
+        if action_pressed and not last_action_btn then
             _init()
         end
-        last_btn_z = z_pressed
+        last_action_btn = action_pressed
         return
     end
-    last_btn_z = z_pressed
+    last_action_btn = action_pressed
 
     -- Input
     if btn(0) and dir_x == 0 then
@@ -159,7 +161,7 @@ function _draw()
         -- We don't have print() yet, so we just use colors to indicate state
         fill_rect(64, 100, 128, 40, C_SNAKE)
         fill_rect(68, 104, 120, 32, C_BG)
-        -- Red/Bright center block to mean "Press Z to restart"
+        -- Red/Bright center block to mean "Press any Action button to restart"
         fill_rect(120, 112, 16, 16, C_APPLE)
 
         return
