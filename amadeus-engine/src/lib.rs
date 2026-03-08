@@ -7,6 +7,9 @@ use std::rc::Rc;
 use image::GenericImageView;
 
 pub mod api;
+pub mod audio;
+
+use audio::AudioSystem;
 
 /// The default width of the Amadeus console screen in pixels (NES resolution).
 pub const DEFAULT_WIDTH: usize = 256;
@@ -59,6 +62,9 @@ pub struct Console {
     pub buttons: [bool; 8],
 
     pub frame_counter: u32,
+
+    /// The audio subsystem (wrapped in an Option in case audio device fails to init)
+    pub audio: Option<AudioSystem>,
 }
 
 impl Console {
@@ -102,6 +108,14 @@ impl Console {
             }
         }
 
+        let audio = match AudioSystem::new() {
+            Ok(sys) => Some(sys),
+            Err(e) => {
+                log::warn!("Audio system disabled: {}", e);
+                None
+            }
+        };
+
         Self {
             vram: vec![0; config.width * config.height * 4],
             palette,
@@ -109,6 +123,7 @@ impl Console {
             config,
             buttons: [false; 8],
             frame_counter: 0,
+            audio,
         }
     }
 
@@ -117,8 +132,6 @@ impl Console {
         let mut closest_idx = 0;
         let mut min_dist = f32::MAX;
 
-        // Only search the colors that have been populated (avoid searching the empty black slots if possible,
-        // though we check all 256 for a robust matching system).
         for (i, color) in self.palette.iter().enumerate() {
             let dr = (r as f32) - (color.r as f32);
             let dg = (g as f32) - (color.g as f32);

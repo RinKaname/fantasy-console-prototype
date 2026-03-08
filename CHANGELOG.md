@@ -41,3 +41,16 @@ All notable changes to the Amadeus 8-bit Fantasy Console project will be documen
 - Added the Lua API:
   - `spr(id, x, y, [flip_x], [flip_y], [width], [height])`: Draws an 8x8 tile from the Sprite RAM to the screen. Supports horizontal/vertical flipping and multi-tile drawing (e.g., drawing a 2x2 grid of tiles at once).
 - Created a sample 16x16 PNG `sprites.png` and updated the `cart.lua` to draw an interactive character instead of a pixel.
+
+**Phase 5: Audio Engine**
+- Integrated the `rodio` crate to handle asynchronous audio output.
+- Built a 4-channel procedural synthesizer in `amadeus-engine/src/audio.rs` that generates waveforms mathematically at runtime, mimicking physical hardware.
+- Implemented the "ROM" of built-in Steins;Gate themed audio assets:
+  - `0`: UI Blip
+  - `1`: Error Buzz
+  - `2`: Nixie Click
+  - `3`: System Startup
+  - `10`: "Okarin" Beep
+- Added the Lua API:
+  - `sfx(id)`: Plays the specified synthesized sound effect on the next available audio channel.
+- Updated `cart.lua` to trigger sound effects on startup, when colliding with screen boundaries, and when pressing buttons.

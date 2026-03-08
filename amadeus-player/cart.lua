@@ -1,11 +1,15 @@
 -- Amadeus Demo Cartridge: "Interactive Input Test"
--- Demonstrates the Makise palette and the pset/cls/btn APIs.
+-- Demonstrates the Makise palette and the pset/cls/btn/sfx APIs.
 
 -- Global State
 x = 128
 y = 120
 speed = 2
 flip_x = false
+
+-- State tracking so we only play sound ONCE when a button is pressed, not 60 times a second
+prev_btn4 = false
+prev_btn5 = false
 
 -- Runs once when the cartridge is loaded
 function _init()
@@ -14,6 +18,9 @@ function _init()
 
     -- Clear the screen with the deep dark blue (Makise color 0)
     cls(0)
+
+    -- Play the system startup sound
+    sfx(3)
 end
 
 -- Runs 60 times a second
@@ -35,20 +42,48 @@ function _update()
     end
 
     -- Action buttons: Z (4) and X (5)
-    -- Hold Z to move faster, hold X to move slower
-    if btn(4) then
+    -- Play a sound the moment the button is pressed
+    local btn4 = btn(4)
+    local btn5 = btn(5)
+
+    if btn4 and not prev_btn4 then
+        -- Just pressed Z: Play the "Okarin Beep"
+        sfx(10)
+    end
+
+    if btn5 and not prev_btn5 then
+        -- Just pressed X: Play the "Nixie Click"
+        sfx(2)
+    end
+
+    if btn4 then
         speed = 4
-    elseif btn(5) then
+    elseif btn5 then
         speed = 1
     else
         speed = 2
     end
 
+    prev_btn4 = btn4
+    prev_btn5 = btn5
+
     -- Keep the character on screen (NES res: 256x240)
-    if x < 0 then x = 0 end
-    if x > 240 then x = 240 end
-    if y < 0 then y = 0 end
-    if y > 224 then y = 224 end
+    if x < 0 then
+        x = 0
+        sfx(1) -- Play error buzz if we hit the wall
+    end
+    if x > 240 then
+        x = 240
+        sfx(1)
+    end
+    if y < 0 then
+        y = 0
+        sfx(1)
+    end
+    if y > 224 then
+        y = 224
+        sfx(1)
+    end
 end
 
 -- Runs every frame after _update
