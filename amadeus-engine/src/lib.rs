@@ -111,10 +111,12 @@ impl Console {
 
         let audio = match AudioSystem::new() {
             Ok(sys) => {
+                println!("[AMADEUS] Audio system connected to default device successfully.");
                 log::info!("Audio system initialized successfully.");
                 Some(sys)
             },
             Err(e) => {
+                println!("[AMADEUS ERROR] Could not connect to audio device! Game will play silently. Reason: {}", e);
                 log::error!("CRITICAL: Audio system disabled. Reason: {}", e);
                 None
             }
