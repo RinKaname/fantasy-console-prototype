@@ -110,9 +110,12 @@ impl Console {
         }
 
         let audio = match AudioSystem::new() {
-            Ok(sys) => Some(sys),
+            Ok(sys) => {
+                log::info!("Audio system initialized successfully.");
+                Some(sys)
+            },
             Err(e) => {
-                log::warn!("Audio system disabled: {}", e);
+                log::error!("CRITICAL: Audio system disabled. Reason: {}", e);
                 None
             }
         };
