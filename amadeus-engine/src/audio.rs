@@ -6,7 +6,7 @@ use std::time::Duration;
 /// Handles the `rodio` output stream and the synthesis of built-in ROM sounds.
 pub struct AudioSystem {
     _stream: OutputStream,
-    stream_handle: OutputStreamHandle,
+    _stream_handle: OutputStreamHandle,
     // We keep a few sinks alive so sounds can overlap if necessary.
     sinks: Vec<Sink>,
     next_sink: usize,
@@ -27,7 +27,7 @@ impl AudioSystem {
 
         Ok(Self {
             _stream,
-            stream_handle,
+            _stream_handle: stream_handle,
             sinks,
             next_sink: 0,
         })
