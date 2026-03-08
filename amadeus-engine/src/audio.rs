@@ -46,23 +46,24 @@ impl AudioSystem {
             0 => {
                 let source = SineWave::new(880.0)
                     .take_duration(Duration::from_millis(50))
+                    // apply a simple fade out to remove popping
+                    .fade_in(Duration::from_millis(5))
                     .amplify(0.2);
                 sink.append(source);
             }
             // Error Buzz: Harsh, low-frequency buzz
             1 => {
-                let source = SineWave::new(110.0)
-                    .take_duration(Duration::from_millis(200))
-                    .amplify(0.4);
-                // Note: a true square wave sounds more "buzzy", but rodio's default
-                // sources only include SineWave. We'll use a low sine for now as a placeholder.
+                // A very low frequency sinewave as a placeholder for a buzz, amplified to clip/distort
+                let source = SineWave::new(65.41) // C2
+                    .take_duration(Duration::from_millis(250))
+                    .amplify(0.8);
                 sink.append(source);
             }
             // Nixie Click: Extremely short, high transient click
             2 => {
-                let source = SineWave::new(2000.0)
-                    .take_duration(Duration::from_millis(15))
-                    .amplify(0.5);
+                let source = SineWave::new(3000.0)
+                    .take_duration(Duration::from_millis(10))
+                    .amplify(0.6);
                 sink.append(source);
             }
             // System Startup: Rising tone
@@ -91,6 +92,11 @@ impl AudioSystem {
                 log::warn!("Requested unknown SFX id: {}", id);
             }
         }
+
+        // Force playback to resume in case `clear` paused the sink,
+        // which can happen on some backends (like WASAPI on Windows)
+        // when the internal queue becomes empty.
+        sink.play();
 
         // Round-robin to the next channel for polyphony
         self.next_sink = (self.next_sink + 1) % self.sinks.len();
