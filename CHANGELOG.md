@@ -31,3 +31,13 @@ All notable changes to the Amadeus 8-bit Fantasy Console project will be documen
 - Added the Lua API:
   - `btn(index)`: Returns `true` if a virtual button (0-7) is currently pressed.
 - Created `cart.lua` (an interactive test cartridge) demonstrating user movement, screen clearing, dynamic palette swapping, and drawing primitives using the new APIs.
+
+**Phase 4: Assets and Constraints**
+- Added `config.json` support to the `amadeus-player` to override hardware constraints.
+  - Users can customize the internal rendering resolution (e.g., 256x240 or 128x128).
+  - Users can select a default boot palette (e.g., `makise` or `ibn5100`).
+- Implemented a 128x128 Sprite RAM (16,384 bytes) to store up to 256 8x8 tiles as color indices.
+- Added `image` crate integration to load standard `sprites.png` files, automatically mapping RGB pixels to the closest active palette index (using Color 0 as the transparent background).
+- Added the Lua API:
+  - `spr(id, x, y, [flip_x], [flip_y], [width], [height])`: Draws an 8x8 tile from the Sprite RAM to the screen. Supports horizontal/vertical flipping and multi-tile drawing (e.g., drawing a 2x2 grid of tiles at once).
+- Created a sample 16x16 PNG `sprites.png` and updated the `cart.lua` to draw an interactive character instead of a pixel.

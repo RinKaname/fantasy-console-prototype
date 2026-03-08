@@ -5,6 +5,7 @@
 x = 128
 y = 120
 speed = 2
+flip_x = false
 
 -- Runs once when the cartridge is loaded
 function _init()
@@ -20,9 +21,11 @@ function _update()
     -- Input check: 0=Left, 1=Right, 2=Up, 3=Down
     if btn(0) then
         x = x - speed
+        flip_x = true -- Face left
     end
     if btn(1) then
         x = x + speed
+        flip_x = false -- Face right
     end
     if btn(2) then
         y = y - speed
@@ -41,11 +44,11 @@ function _update()
         speed = 2
     end
 
-    -- Keep the pixel on screen (NES res: 256x240)
+    -- Keep the character on screen (NES res: 256x240)
     if x < 0 then x = 0 end
-    if x > 255 then x = 255 end
+    if x > 240 then x = 240 end
     if y < 0 then y = 0 end
-    if y > 239 then y = 239 end
+    if y > 224 then y = 224 end
 end
 
 -- Runs every frame after _update
@@ -72,19 +75,17 @@ function _draw()
         end
     end
 
-    -- Draw the player pixel as a small 3x3 square so it's easier to see
-    -- Color #8 is crimson red in Makise
-    for px = -1, 1 do
-        for py = -1, 1 do
-            pset(x + px, y + py, 8)
+    -- If button Z (4) is held, draw a neon pink (15) trail/aura
+    if btn(4) then
+        for px = -4, 19 do
+            for py = -4, 19 do
+                pset(x + px, y + py, 15)
+            end
         end
     end
 
-    -- If button Z (4) is held, draw a neon pink (15) trail/aura
-    if btn(4) then
-        pset(x, y - 3, 15)
-        pset(x, y + 3, 15)
-        pset(x - 3, y, 15)
-        pset(x + 3, y, 15)
-    end
+    -- Draw the player sprite.
+    -- We draw a 2x2 tile character starting at tile ID 0 in the Sprite RAM.
+    -- spr(id, x, y, flip_x, flip_y, width, height)
+    spr(0, x, y, flip_x, false, 2, 2)
 end
