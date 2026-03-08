@@ -3,7 +3,7 @@ use log::error;
 use pixels::{Error, Pixels, SurfaceTexture};
 use std::time::Instant;
 use winit::dpi::LogicalSize;
-use winit::event::Event;
+use winit::event::{Event, VirtualKeyCode};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
@@ -82,6 +82,17 @@ fn main() -> Result<(), Error> {
                     return;
                 }
             }
+
+            // Map physical keyboard keys to virtual controller buttons
+            // Index mapping: 0=Left, 1=Right, 2=Up, 3=Down, 4=A, 5=B, 6=Start, 7=Select
+            engine.set_button_state(0, input.key_held(VirtualKeyCode::Left));
+            engine.set_button_state(1, input.key_held(VirtualKeyCode::Right));
+            engine.set_button_state(2, input.key_held(VirtualKeyCode::Up));
+            engine.set_button_state(3, input.key_held(VirtualKeyCode::Down));
+            engine.set_button_state(4, input.key_held(VirtualKeyCode::Z));
+            engine.set_button_state(5, input.key_held(VirtualKeyCode::X));
+            engine.set_button_state(6, input.key_held(VirtualKeyCode::Return)); // Enter
+            engine.set_button_state(7, input.key_held(VirtualKeyCode::RShift)); // Select
 
             // Cap the framerate roughly to 60 FPS
             let now = Instant::now();

@@ -29,6 +29,10 @@ pub struct Console {
     /// The virtual Palette RAM: 256 color slots.
     pub palette: [Color; 256],
 
+    /// The state of the 8 virtual controller buttons.
+    /// Index mapping: 0=Left, 1=Right, 2=Up, 3=Down, 4=A, 5=B, 6=Start, 7=Select.
+    pub buttons: [bool; 8],
+
     // Example test pattern state
     pub frame_counter: u32,
 }
@@ -68,6 +72,7 @@ impl Console {
         Self {
             vram: vec![0; WIDTH * HEIGHT * 4],
             palette,
+            buttons: [false; 8],
             frame_counter: 0,
         }
     }
@@ -113,6 +118,13 @@ impl Engine {
             if let Err(e) = init_fn.call::<()>(()) {
                 log::error!("Error in _init(): {}", e);
             }
+        }
+    }
+
+    /// Update the input states before running the frame.
+    pub fn set_button_state(&mut self, index: usize, pressed: bool) {
+        if index < 8 {
+            self.console.borrow_mut().buttons[index] = pressed;
         }
     }
 

@@ -61,5 +61,21 @@ pub fn setup_lua_sandbox(lua: &Lua, console_ref: Rc<RefCell<Console>>) -> LuaRes
     };
     globals.set("set_color", set_color)?;
 
+    // API: btn(index)
+    // Returns true if the button at the given index is currently pressed.
+    // Index mapping: 0=Left, 1=Right, 2=Up, 3=Down, 4=A, 5=B, 6=Start, 7=Select.
+    let btn = {
+        let console_ref = Rc::clone(&console_ref);
+        lua.create_function(move |_, index: u8| {
+            let is_pressed = if index < 8 {
+                console_ref.borrow().buttons[index as usize]
+            } else {
+                false
+            };
+            Ok(is_pressed)
+        })?
+    };
+    globals.set("btn", btn)?;
+
     Ok(())
 }
