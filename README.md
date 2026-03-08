@@ -31,10 +31,11 @@ sudo apt-get update && sudo apt-get install -y libasound2-dev
 
 ## Playing Games
 
-To launch the Amadeus console and play the built-in demo game (**Amadeus Snake**):
+To launch the Amadeus console and play the built-in demo game (**Amadeus Snake**), you must navigate into the player directory so the engine can find the asset files (`config.json`, `carts/`, etc.):
 
 ```bash
-cargo run -p amadeus-player
+cd amadeus-player
+cargo run
 ```
 
 ### Controls (Amadeus Snake)
@@ -47,10 +48,11 @@ cargo run -p amadeus-player
 
 To write your own game, create a `.lua` file (e.g., `my_game.lua`) and define the three core engine hooks: `_init()`, `_update()`, and `_draw()`.
 
-You can load your custom cartridge by passing the file path to the player:
+Make sure you are in the `amadeus-player` directory, and load your custom cartridge by passing the file path to the player:
 
 ```bash
-cargo run -p amadeus-player -- carts/test_input.lua
+cd amadeus-player
+cargo run -- carts/test_input.lua
 ```
 
 ### Hot-Swapping
