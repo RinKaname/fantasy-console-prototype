@@ -1,10 +1,10 @@
--- Amadeus Demo Cartridge: "Bouncing Pixel"
--- Demonstrates the Makise palette and the pset/cls APIs.
+-- Amadeus Demo Cartridge: "Interactive Input Test"
+-- Demonstrates the Makise palette and the pset/cls/btn APIs.
 
 -- Global State
-x = 0
+x = 128
 y = 120
-direction = 1
+speed = 2
 
 -- Runs once when the cartridge is loaded
 function _init()
@@ -17,24 +17,41 @@ end
 
 -- Runs 60 times a second
 function _update()
-    -- Bounce the pixel back and forth
-    x = x + direction
-    if x >= 256 then
-        direction = -1
-        x = 255
-    elseif x < 0 then
-        direction = 1
-        x = 0
+    -- Input check: 0=Left, 1=Right, 2=Up, 3=Down
+    if btn(0) then
+        x = x - speed
     end
+    if btn(1) then
+        x = x + speed
+    end
+    if btn(2) then
+        y = y - speed
+    end
+    if btn(3) then
+        y = y + speed
+    end
+
+    -- Action buttons: Z (4) and X (5)
+    -- Hold Z to move faster, hold X to move slower
+    if btn(4) then
+        speed = 4
+    elseif btn(5) then
+        speed = 1
+    else
+        speed = 2
+    end
+
+    -- Keep the pixel on screen (NES res: 256x240)
+    if x < 0 then x = 0 end
+    if x > 255 then x = 255 end
+    if y < 0 then y = 0 end
+    if y > 239 then y = 239 end
 end
 
 -- Runs every frame after _update
 function _draw()
-    -- Clear the background every frame so it doesn't leave a trail
+    -- Clear the background every frame
     cls(0)
-
-    -- Draw a single pixel moving across the screen (color #8 is crimson red in Makise)
-    pset(x, y, 8)
 
     -- Draw a static box to show the "Makise" palette
     local start_x = 10
@@ -53,5 +70,21 @@ function _draw()
                 end
             end
         end
+    end
+
+    -- Draw the player pixel as a small 3x3 square so it's easier to see
+    -- Color #8 is crimson red in Makise
+    for px = -1, 1 do
+        for py = -1, 1 do
+            pset(x + px, y + py, 8)
+        end
+    end
+
+    -- If button Z (4) is held, draw a neon pink (15) trail/aura
+    if btn(4) then
+        pset(x, y - 3, 15)
+        pset(x, y + 3, 15)
+        pset(x - 3, y, 15)
+        pset(x + 3, y, 15)
     end
 end
