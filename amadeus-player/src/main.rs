@@ -98,10 +98,14 @@ fn main() -> Result<(), Error> {
             }
 
             if let Some(size) = input.window_resized() {
-                if let Err(err) = pixels.resize_surface(size.width, size.height) {
-                    error!("pixels.resize_surface() failed: {err}");
-                    *control_flow = ControlFlow::Exit;
-                    return;
+                // IMPORTANT: Windows will sometimes send a 0x0 resize event when minimizing.
+                // We must catch this, or `pixels` will panic trying to create a 0-width GPU texture.
+                if size.width > 0 && size.height > 0 {
+                    if let Err(err) = pixels.resize_surface(size.width, size.height) {
+                        error!("pixels.resize_surface() failed: {err}");
+                        *control_flow = ControlFlow::Exit;
+                        return;
+                    }
                 }
             }
 
