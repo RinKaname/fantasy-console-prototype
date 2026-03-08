@@ -79,6 +79,21 @@ pub fn setup_lua_sandbox(lua: &Lua, console_ref: Rc<RefCell<Console>>) -> LuaRes
     };
     globals.set("btn", btn)?;
 
+    // API: sfx(id)
+    // Plays a built-in synthesized sound effect on the next available audio channel.
+    // 0: UI Blip, 1: Error Buzz, 2: Nixie Click, 3: System Startup, 10: Okarin Beep.
+    let sfx = {
+        let console_ref = Rc::clone(&console_ref);
+        lua.create_function(move |_, id: u8| {
+            let mut console = console_ref.borrow_mut();
+            if let Some(audio) = &mut console.audio {
+                audio.play_sfx(id);
+            }
+            Ok(())
+        })?
+    };
+    globals.set("sfx", sfx)?;
+
     // API: spr(id, x, y, [flip_x], [flip_y], [width], [height])
     // Draws a sprite from the Sprite RAM to the VRAM.
     // id: Sprite index (0-255). The spritesheet is 16x16 tiles (128x128 pixels).
