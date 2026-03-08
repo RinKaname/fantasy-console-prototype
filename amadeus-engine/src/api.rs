@@ -94,6 +94,51 @@ pub fn setup_lua_sandbox(lua: &Lua, console_ref: Rc<RefCell<Console>>) -> LuaRes
     };
     globals.set("sfx", sfx)?;
 
+    // API: print(text, x, y, color)
+    // Draws text to the screen using the built-in 5x7 bitmap font.
+    let print = {
+        let console_ref = Rc::clone(&console_ref);
+        lua.create_function(move |_, (text, start_x, start_y, color_index): (String, f64, f64, u8)| {
+            let mut console = console_ref.borrow_mut();
+            let width = console.config.width as i32;
+            let height = console.config.height as i32;
+
+            let mut cursor_x = start_x.floor() as i32;
+            let cursor_y = start_y.floor() as i32;
+
+            for c in text.chars() {
+                // Get the 5x7 boolean array for the character
+                let char_data = crate::font::get_char_data(c);
+
+                // Draw the pixels
+                for py in 0..7 {
+                    for px in 0..5 {
+                        let screen_x = cursor_x + px;
+                        let screen_y = cursor_y + py;
+
+                        // Check bounds
+                        if screen_x >= 0 && screen_x < width && screen_y >= 0 && screen_y < height {
+                            let is_pixel_on = char_data[(py * 5 + px) as usize];
+                            if is_pixel_on {
+                                let color = console.palette[color_index as usize];
+                                let idx = ((screen_y as usize) * (width as usize) + (screen_x as usize)) * 4;
+                                console.vram[idx] = color.r;
+                                console.vram[idx + 1] = color.g;
+                                console.vram[idx + 2] = color.b;
+                                console.vram[idx + 3] = color.a;
+                            }
+                        }
+                    }
+                }
+
+                // Move cursor right by 6 pixels (5 for char width + 1 for spacing)
+                cursor_x += 6;
+            }
+            Ok(())
+        })?
+    };
+    globals.set("print", print)?;
+
     // API: spr(id, x, y, [flip_x], [flip_y], [width], [height])
     // Draws a sprite from the Sprite RAM to the VRAM.
     // id: Sprite index (0-255). The spritesheet is 16x16 tiles (128x128 pixels).

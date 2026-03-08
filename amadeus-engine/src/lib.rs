@@ -8,6 +8,7 @@ use image::GenericImageView;
 
 pub mod api;
 pub mod audio;
+pub mod font;
 
 use audio::AudioSystem;
 

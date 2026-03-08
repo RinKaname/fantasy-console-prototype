@@ -54,3 +54,9 @@ All notable changes to the Amadeus 8-bit Fantasy Console project will be documen
 - Added the Lua API:
   - `sfx(id)`: Plays the specified synthesized sound effect on the next available audio channel.
 - Updated `cart.lua` to trigger sound effects on startup, when colliding with screen boundaries, and when pressing buttons.
+
+**Phase 6: Text Rendering**
+- Created `amadeus-engine/src/font.rs` containing a hardcoded 5x7 "Hacker Terminal" bitmap font (supporting ASCII letters, numbers, and basic punctuation).
+- Added the Lua API:
+  - `print(text, x, y, color)`: Draws a string of text to the screen using the built-in bitmap font.
+- Updated `carts/snake.lua` to use the `print` API to render a live scoreboard and a styled "SYSTEM FAILURE" Game Over screen with clear restart instructions.
