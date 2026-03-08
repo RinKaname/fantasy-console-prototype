@@ -158,11 +158,13 @@ function _draw()
             end
         end
 
-        -- We don't have print() yet, so we just use colors to indicate state
+        -- Draw Game Over Window
         fill_rect(64, 100, 128, 40, C_SNAKE)
-        fill_rect(68, 104, 120, 32, C_BG)
-        -- Red/Bright center block to mean "Press any Action button to restart"
-        fill_rect(120, 112, 16, 16, C_APPLE)
+        fill_rect(66, 102, 124, 36, C_BG)
+
+        print("SYSTEM FAILURE", 82, 108, C_APPLE)
+        print("SCORE: " .. score, 100, 118, C_SNAKE)
+        print("PRESS Z TO RESTART", 70, 128, C_GRID)
 
         return
     end
@@ -179,8 +181,6 @@ function _draw()
         fill_rect(segment.x * GRID_SIZE + 1, segment.y * GRID_SIZE + 1, GRID_SIZE - 2, GRID_SIZE - 2, col)
     end
 
-    -- Draw Score Bar indicator
-    for i=0, score/10 do
-        fill_rect(i * 4, 0, 3, 2, C_APPLE)
-    end
+    -- Draw Scoreboard at the top
+    print("SCORE: " .. score, 4, 4, C_APPLE)
 end
