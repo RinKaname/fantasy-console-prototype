@@ -1,4 +1,4 @@
-use amadeus_engine::{Console, HEIGHT, WIDTH};
+use amadeus_engine::{Engine, HEIGHT, WIDTH};
 use log::error;
 use pixels::{Error, Pixels, SurfaceTexture};
 use std::time::Instant;
@@ -33,17 +33,30 @@ fn main() -> Result<(), Error> {
         Pixels::new(WIDTH as u32, HEIGHT as u32, surface_texture)?
     };
 
-    let mut console = Console::new();
+    let mut engine = Engine::new();
+
+    // Load the test cartridge. Instead of hardcoding the path, we use the macro
+    // to embed the script directly in the binary for this test phase.
+    let test_cartridge = include_str!("../cart.lua");
+    engine.load_cartridge(test_cartridge);
+
     let mut last_frame = Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
+        // IMPORTANT: Let the event loop run continuously so the game updates
+        // without waiting for OS events (like mouse movement).
+        *control_flow = ControlFlow::Poll;
+
         // Draw the current frame
         if let Event::RedrawRequested(_) = &event {
-            // Step 1: Tell the console to draw to its internal VRAM
-            console.draw();
+            // Step 1: Tell the Lua script to draw to the VRAM
+            engine.draw();
 
-            // Step 2: Copy the console's VRAM to the pixels frame buffer
-            pixels.frame_mut().copy_from_slice(&console.vram);
+            // Step 2: Copy the engine's VRAM to the pixels frame buffer
+            // We use `with_vram` to pass a reference instead of cloning the whole array!
+            engine.with_vram(|vram| {
+                pixels.frame_mut().copy_from_slice(vram);
+            });
 
             // Step 3: Render it to the screen
             if let Err(err) = pixels.render() {
@@ -74,8 +87,8 @@ fn main() -> Result<(), Error> {
             let now = Instant::now();
             let elapsed = now.duration_since(last_frame).as_secs_f64();
             if elapsed >= 1.0 / 60.0 {
-                // Update the console logic
-                console.update();
+                // Update the console logic (runs Lua _update)
+                engine.update();
 
                 // Request a redraw
                 window.request_redraw();
