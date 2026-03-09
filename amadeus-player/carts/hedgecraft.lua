@@ -16,12 +16,12 @@ BILLION = 100000000000
 ticks = 0
 rng_seed = 42
 game_state = "START"
+year = 1
 month = 1
 
 gp_cash = 2 * MILLION -- Start with $2M General Partner capital
-total_aum = 0
-series_list = {}
-series_counter = 1
+total_aum = 50 * MILLION
+year_start_aum = 50 * MILLION
 
 compliance_spend = 5000000 -- $50k per month initially
 base_opex = 10000000       -- $100k per month fixed cost
@@ -30,6 +30,17 @@ sec_heat = 0.0
 last_return_pct = 0.0
 msg_text = ""
 msg_timer = 0
+
+-- Market Regimes
+regimes = {
+    { name = "BULL MARKET", mom = 1.1, vol = 0.7, liq = 1.2, fund = 1.3 },
+    { name = "BEAR MARKET", mom = -0.4, vol = 1.4, liq = 0.8, fund = 0.7 },
+    { name = "SIDEWAYS GRIND", mom = 0.0, vol = 0.5, liq = 1.0, fund = 0.9 },
+    { name = "VOLATILITY SPIKE", mom = -0.1, vol = 2.0, liq = 0.6, fund = 0.8 },
+    { name = "LIQUIDITY CRISIS", mom = -0.8, vol = 2.5, liq = 0.3, fund = 0.2 },
+    { name = "RECOVERY PHASE", mom = 0.8, vol = 1.2, liq = 1.1, fund = 1.1 }
+}
+current_regime = 1
 
 view_mode = "DASH" -- "DASH" or "OPS"
 ops_idx = 1
@@ -93,92 +104,67 @@ function new_series(capital_cents)
     return s
 end
 
+function roll_regime()
+    -- Simple weighted random (could be expanded)
+    local r = random_float()
+    if r < 0.3 then current_regime = 1 -- Bull (30%)
+    elseif r < 0.5 then current_regime = 2 -- Bear (20%)
+    elseif r < 0.8 then current_regime = 3 -- Sideways (30%)
+    elseif r < 0.9 then current_regime = 4 -- Volatility Spike (10%)
+    elseif r < 0.95 then current_regime = 5 -- Liquidity Crisis (5%)
+    else current_regime = 6 end -- Recovery (5%)
+end
+
 function _init()
     ticks = 0
+    year = 1
     month = 1
     gp_cash = 2 * MILLION
-    total_aum = 0
-    series_list = {}
-    series_counter = 1
+    total_aum = 50 * MILLION
+    year_start_aum = 50 * MILLION
     sec_heat = 0.0
     last_return_pct = 0.0
-
-    -- Raise initial $50M seed capital
-    new_series(50 * MILLION)
+    roll_regime()
     game_state = "PLAY"
     sfx(3)
 end
 
 function advance_month()
-    month = month + 1
+    local regime = regimes[current_regime]
 
-    -- 1. Calculate Gross Return (Alpha Decay + Volatility)
-    -- Capacity expands by $500M per PM
+    -- 1. Calculate Gross Return (Alpha Decay + Regime Effects)
     local capacity_limit = (500 * MILLION) + (staff.pm * 500 * MILLION)
     local utilization = total_aum / capacity_limit
 
-    -- Base Alpha increases by 0.5% per Quant
-    local base_alpha = 0.02 + (staff.quant * 0.005)
+    local base_alpha = 0.015 + (staff.quant * 0.005)
     local alpha = base_alpha * math.exp(-2.0 * utilization)
 
-    -- Volatility decreases by 0.5% per Risk Manager (min 1%)
+    -- Apply Regime Momentum
+    alpha = alpha + (regime.mom * 0.02)
+
+    -- Calculate Volatility (Base - RiskMgr + Regime)
     local base_vol = 0.03 - (staff.risk * 0.005)
     if base_vol < 0.01 then base_vol = 0.01 end
+    base_vol = base_vol * regime.vol
 
     -- Add market noise
     local noise = random_normal() * base_vol
 
-    local gross_return = alpha + noise
+    -- Apply Liquidity consistency factor
+    local gross_return = (alpha + noise) / regime.liq
     last_return_pct = gross_return * 100.0
 
-    -- 2. Apply Returns & Calculate Fees (Series Accounting)
-    local total_mgmt_fee = 0
-    local total_perf_fee = 0
-    total_aum = 0 -- Recalculate
+    -- 2. Apply Returns to total AUM
+    local monthly_profit = math.floor(total_aum * gross_return)
+    total_aum = total_aum + monthly_profit
 
-    for i = #series_list, 1, -1 do
-        local s = series_list[i]
-
-        -- Apply gross return to NAV
-        s.nav_per_share = s.nav_per_share * (1.0 + gross_return)
-        local series_value = math.floor(s.shares * s.nav_per_share)
-
-        -- Deduct Management Fee (2% annually -> 0.1666% monthly)
-        local mgmt_fee = math.floor(series_value * (0.02 / 12.0))
-        total_mgmt_fee = total_mgmt_fee + mgmt_fee
-        series_value = series_value - mgmt_fee
-
-        -- Recalculate NAV after mgmt fee
-        s.nav_per_share = series_value / s.shares
-
-        -- Deduct Performance Fee (20% of profits above HWM)
-        if s.nav_per_share > s.hwm then
-            local profit_per_share = s.nav_per_share - s.hwm
-            local perf_fee_per_share = profit_per_share * 0.20
-
-            local perf_fee_total = math.floor(perf_fee_per_share * s.shares)
-            total_perf_fee = total_perf_fee + perf_fee_total
-
-            s.nav_per_share = s.nav_per_share - perf_fee_per_share
-            s.hwm = s.nav_per_share -- Set new HWM
-            series_value = math.floor(s.shares * s.nav_per_share)
-        end
-
-        -- Check if Series is wiped out
-        if series_value <= 0 then
-            table.remove(series_list, i)
-        else
-            total_aum = total_aum + series_value
-        end
-    end
+    if total_aum < 0 then total_aum = 0 end
 
     -- 3. OpEx and Compliance
-    -- Base OpEx scales logarithmically with AUM: OpEx = Base + (Scale * ln(AUM_Millions))
     local aum_m = total_aum / MILLION
     if aum_m < 1 then aum_m = 1 end
-    local scaling_cost = math.floor(1000000 * math.log(aum_m)) -- $10k per log unit
+    local scaling_cost = math.floor(1000000 * math.log(aum_m))
 
-    -- Staffing costs
     local staff_cost = (staff.pm * roles[1].cost) +
                        (staff.quant * roles[2].cost) +
                        (staff.risk * roles[3].cost) +
@@ -186,8 +172,8 @@ function advance_month()
 
     local total_opex = base_opex + scaling_cost + compliance_spend + staff_cost
 
-    -- Update GP Cash
-    gp_cash = gp_cash + total_mgmt_fee + total_perf_fee - total_opex
+    -- Deduct monthly overhead from GP Cash directly
+    gp_cash = gp_cash - total_opex
 
     -- 4. Risk Check: Insolvency
     if gp_cash < 0 then
@@ -197,20 +183,15 @@ function advance_month()
     end
 
     -- 5. Risk Check: SEC Audit
-    -- Ideal compliance spend scales linearly with AUM. E.g., $10k per $100M AUM.
     local required_comp = math.floor((total_aum / (100 * MILLION)) * 1000000)
-    if required_comp < 5000000 then required_comp = 5000000 end -- Min $50k
+    if required_comp < 5000000 then required_comp = 5000000 end
 
     if compliance_spend < required_comp then
-        -- Build heat
         local deficit_ratio = 1.0 - (compliance_spend / required_comp)
-        sec_heat = sec_heat + (deficit_ratio * 0.05) -- Heat grows up to 5% per month
+        sec_heat = sec_heat + (deficit_ratio * 0.05)
     else
-        -- Cool down
         sec_heat = math.max(0.0, sec_heat - 0.02)
     end
-
-    -- Compliance Officers passively reduce heat
     sec_heat = math.max(0.0, sec_heat - (staff.comp * 0.01))
 
     if random_float() < sec_heat then
@@ -219,8 +200,50 @@ function advance_month()
         return
     end
 
-    -- Play sound for advancing month based on return
-    if gross_return > 0 then sfx(2) else sfx(1) end
+    -- 6. Time Progression & Year-End Accounting
+    if month == 12 then
+        -- YEAR END! Calculate Fees
+        local annual_return_raw = (total_aum - year_start_aum) / year_start_aum
+
+        local perf_fee = 0
+        local mgmt_fee = 0
+
+        -- 8% Hurdle Rate
+        if annual_return_raw > 0.08 then
+            local excess = annual_return_raw - 0.08
+            perf_fee = math.floor(year_start_aum * excess * 0.20)
+        end
+
+        total_aum = total_aum - perf_fee
+
+        -- 2% Management Fee (applied to final AUM)
+        mgmt_fee = math.floor(total_aum * 0.02)
+        total_aum = total_aum - mgmt_fee
+
+        gp_cash = gp_cash + perf_fee + mgmt_fee
+
+        -- LP Revolt Check (Excessive Fees > 15% AND AUM < 1M)
+        local total_fees = perf_fee + mgmt_fee
+        local fee_ratio = 0
+        if total_aum > 0 then fee_ratio = total_fees / (total_aum + total_fees) end
+
+        if fee_ratio > 0.15 and total_aum < 1 * MILLION then
+            game_state = "GAMEOVER_REVOLT"
+            sfx(1)
+            return
+        end
+
+        show_msg("YEAR END. FEES EARNED: " .. format_money(total_fees), true)
+
+        -- Reset for next year
+        year_start_aum = total_aum
+        month = 1
+        year = year + 1
+        roll_regime()
+    else
+        month = month + 1
+        if gross_return > 0 then sfx(2) else sfx(1) end
+    end
 end
 
 -- Debouncing
@@ -269,10 +292,17 @@ function _update()
                 -- Check capacity logic
                 local capacity_limit = (500 * MILLION) + (staff.pm * 500 * MILLION)
                 if total_aum < capacity_limit * 0.9 then
-                    local raise_amt = math.floor((total_aum * 0.20) / MILLION) * MILLION -- Raise 20% of current AUM
+                    -- Apply Regime fundraising multiplier
+                    local raise_base = (total_aum * 0.20) * regimes[current_regime].fund
+                    local raise_amt = math.floor(raise_base / MILLION) * MILLION
+
                     if raise_amt < 10 * MILLION then raise_amt = 10 * MILLION end
-                    new_series(raise_amt)
-                    show_msg("RAISED " .. format_money(raise_amt) .. " IN NEW SERIES!", true)
+
+                    total_aum = total_aum + raise_amt
+                    -- Adjust year_start_aum to prevent performance fee bugs on mid-year raises
+                    year_start_aum = year_start_aum + raise_amt
+
+                    show_msg("ORGANIC INFLOW: " .. format_money(raise_amt), true)
                 else
                     show_msg("FIRM CAPACITY REACHED. HIRE MORE PMs.", false)
                 end
@@ -350,18 +380,20 @@ function _draw()
     -- HEADER
     fill_rect(0, 0, SCREEN_W, 46, C_DIM)
     print("HEDGECRAFT : ALPHA FUND I", 4, 4, C_HL)
-    print("MONTH: " .. tostring(month), 200, 4, C_TEXT)
+    print("YR: " .. tostring(year) .. " | MO: " .. tostring(month), 160, 4, C_TEXT)
 
     print("AUM:     " .. format_money(total_aum), 4, 16, C_HL)
     print("GP CASH: " .. format_money(gp_cash), 4, 26, C_HL)
 
-    local ret_col = last_return_pct >= 0 and C_HL or C_TEXT
-    print("LAST MTH: " .. string.format("%.2f%%", last_return_pct), 140, 16, ret_col)
+    local ytd_return_raw = 0
+    if year_start_aum > 0 then
+        ytd_return_raw = (total_aum - year_start_aum) / year_start_aum
+    end
+    local ytd_pct = ytd_return_raw * 100.0
 
-    -- HEAT
-    local heat_col = sec_heat > 0.3 and C_TEXT or C_HL
-    if sec_heat > 0.6 then heat_col = C_BG end -- Flash warning if we had more colors, use C_BG for now as a "blink" if we animate it
-    print("SEC HEAT: " .. string.format("%.1f%%", sec_heat * 100), 140, 26, heat_col)
+    local ret_col = ytd_pct >= 8.0 and C_HL or C_TEXT
+    print("YTD RET: " .. string.format("%.2f%%", ytd_pct), 140, 16, ret_col)
+    print("HURDLE:  8.00%", 140, 26, C_TEXT)
 
     draw_line(0, 47, SCREEN_W, 47, C_TEXT)
 
@@ -375,25 +407,24 @@ function _draw()
         draw_line(0, 62, SCREEN_W, 62, C_DIM)
 
         if view_mode == "DASH" then
+            -- REGIME & RISK
+            print("MARKET REGIME:", 4, 70, C_TEXT)
+            local reg_name = regimes[current_regime].name
+            print(reg_name, 100, 70, C_HL)
+
+            local heat_col = sec_heat > 0.3 and C_TEXT or C_HL
+            if sec_heat > 0.6 then heat_col = C_BG end
+            print("SEC HEAT: " .. string.format("%.1f%%", sec_heat * 100), 4, 82, heat_col)
+
+            draw_line(0, 94, SCREEN_W, 94, C_DIM)
+
             -- COMPLIANCE SLIDER
-            print("COMPLIANCE (UP/DWN): " .. format_money(compliance_spend) .. "/MO", 4, 70, C_TEXT)
-            draw_line(0, 80, SCREEN_W, 80, C_DIM)
+            print("COMPLIANCE SPEND (UP/DWN):", 4, 102, C_HL)
+            print(format_money(compliance_spend) .. "/MO", 20, 114, C_TEXT)
 
-            -- SERIES BREAKDOWN
-            print("ACTIVE SERIES ACCOUNTING (HWM)", 4, 88, C_HL)
-
-            local start_idx = math.max(1, #series_list - 5)
-            for i = start_idx, #series_list do
-                local s = series_list[i]
-                local y = 100 + ((i - start_idx) * 16)
-
-                local nav_str = string.format("%.3f", s.nav_per_share)
-                local hwm_str = string.format("%.3f", s.hwm)
-
-                local col = C_TEXT
-                if s.nav_per_share > s.hwm then col = C_HL end
-
-                print("S" .. tostring(s.id) .. " NAV: " .. nav_str .. " | HWM: " .. hwm_str, 8, y, col)
+            -- NOTIFICATIONS
+            if msg_timer > 0 then
+                print(">> " .. msg_text, 4, 140, C_TEXT)
             end
 
         elseif view_mode == "OPS" then
@@ -425,30 +456,31 @@ function _draw()
 
         -- FOOTER
         draw_line(0, 205, SCREEN_W, 205, C_DIM)
-        if msg_timer > 0 then
-            fill_rect(0, 206, SCREEN_W, 34, C_BG)
-            print(msg_text, 4, 216, C_HL)
+        if view_mode == "DASH" then
+            print("Z: RAISE CAPITAL", 10, 212, C_HL)
+            print("X: ADVANCE 1 MONTH", 10, 224, C_HL)
         else
-            if view_mode == "DASH" then
-                print("Z: RAISE CAPITAL", 10, 212, C_HL)
-                print("X: ADVANCE 1 MONTH", 10, 224, C_HL)
-            else
-                print("Z: HIRE", 10, 212, C_HL)
-                print("X: FIRE", 10, 224, C_HL)
-            end
+            print("Z: HIRE", 10, 212, C_HL)
+            print("X: FIRE", 10, 224, C_HL)
         end
 
     elseif game_state == "GAMEOVER_CASH" then
         fill_rect(30, 90, 196, 50, C_TEXT)
         fill_rect(32, 92, 192, 46, C_BG)
         print("FUND INSOLVENT", 75, 100, C_TEXT)
-        print("MANAGEMENT FEES FAILED TO COVER OPEX", 40, 110, C_DIM)
+        print("RAN OUT OF GP CASH MID-YEAR", 40, 110, C_DIM)
         print("PRESS Z TO RESTART", 60, 124, C_HL)
     elseif game_state == "GAMEOVER_SEC" then
         fill_rect(30, 90, 196, 50, C_HL)
         fill_rect(32, 92, 192, 46, C_BG)
         print("SEC RAID & ASSET FREEZE", 50, 100, C_HL)
         print("COMPLIANCE FAILURES DETECTED", 45, 110, C_TEXT)
+        print("PRESS Z TO RESTART", 60, 124, C_DIM)
+    elseif game_state == "GAMEOVER_REVOLT" then
+        fill_rect(20, 90, 216, 50, C_HL)
+        fill_rect(22, 92, 212, 46, C_BG)
+        print("LIMITED PARTNER REVOLT", 50, 100, C_HL)
+        print("EXCESSIVE FEES DESTROYED ALL VALUE", 25, 110, C_TEXT)
         print("PRESS Z TO RESTART", 60, 124, C_DIM)
     end
 end
