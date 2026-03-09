@@ -527,7 +527,11 @@ function _draw()
 
                 print(r.name .. " x" .. tostring(count), 14, y, col)
                 print(r.desc, 14, y + 10, C_DIM)
-                print(format_money(r.cost), 200, y, col)
+
+                -- Right-align the cost
+                local cost_str = format_money(r.cost)
+                local cost_x = SCREEN_W - (string.len(cost_str) * 6) - 4
+                print(cost_str, cost_x, y, col)
             end
         end
 
