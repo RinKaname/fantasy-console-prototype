@@ -32,6 +32,7 @@ end
 
 selected_stock = 1
 multiplier = 1 -- Can be 1, 10, or 100
+tx_fee = 5.00  -- Brokerage fee per transaction
 
 -- Economy States: STABLE, BOOM, BUST
 economy = "STABLE"
@@ -159,7 +160,7 @@ function _update()
 
     -- Buy/Cover (Z = 4)
     if just_pressed(4) then
-        local cost = s.price * multiplier
+        local cost = (s.price * multiplier) + tx_fee
         if cash >= cost then
             cash = cash - cost
             s.owned = s.owned + multiplier
@@ -173,11 +174,11 @@ function _update()
     -- You can short sell as long as your total net worth is greater than the value
     -- of the shares you are trying to short (a simple 1:1 margin requirement).
     if just_pressed(5) then
-        local short_value = s.price * multiplier
+        local short_value = (s.price * multiplier) + tx_fee
         -- If we already own shares, we can just sell them.
         -- If we are going negative (shorting), we must have enough net worth to cover the risk.
         if s.owned >= multiplier or net_worth > short_value then
-            local revenue = s.price * multiplier
+            local revenue = (s.price * multiplier) - tx_fee
             cash = cash + revenue
             s.owned = s.owned - multiplier
             sfx(0) -- UI Blip
@@ -370,6 +371,7 @@ function _draw()
     print("QTY: x" .. tostring(multiplier), 10, 184, C_HL)
     print("Z: BUY", 10, 194, C_TEXT)
     print("X: SELL", 10, 204, C_TEXT)
+    print("FEE: $" .. to_fixed2(tx_fee), 10, 214, C_GRID)
 
     -- Draw Ticker Border
     draw_line(0, 220, SCREEN_W, 220, C_GRID)
