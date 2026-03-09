@@ -19,7 +19,7 @@ game_state = "START"
 year = 1
 month = 1
 
-gp_cash = 2 * MILLION -- Start with $2M General Partner capital
+gp_cash = 10 * MILLION -- Start with $10M General Partner capital
 total_aum = 50 * MILLION
 year_start_aum = 50 * MILLION
 
@@ -119,7 +119,7 @@ function _init()
     ticks = 0
     year = 1
     month = 1
-    gp_cash = 2 * MILLION
+    gp_cash = 10 * MILLION
     total_aum = 50 * MILLION
     year_start_aum = 50 * MILLION
     sec_heat = 0.0
