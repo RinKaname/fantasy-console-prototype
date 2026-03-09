@@ -131,7 +131,7 @@ function _update()
 
     local s = stocks[selected_stock]
 
-    -- Buy (Z = 4)
+    -- Buy/Cover (Z = 4)
     if just_pressed(4) then
         local cost = s.price * multiplier
         if cash >= cost then
@@ -143,15 +143,20 @@ function _update()
         end
     end
 
-    -- Sell (X = 5)
+    -- Sell/Short (X = 5)
+    -- You can short sell as long as your total net worth is greater than the value
+    -- of the shares you are trying to short (a simple 1:1 margin requirement).
     if just_pressed(5) then
-        if s.owned >= multiplier then
+        local short_value = s.price * multiplier
+        -- If we already own shares, we can just sell them.
+        -- If we are going negative (shorting), we must have enough net worth to cover the risk.
+        if s.owned >= multiplier or net_worth > short_value then
             local revenue = s.price * multiplier
             cash = cash + revenue
             s.owned = s.owned - multiplier
             sfx(0) -- UI Blip
         else
-            sfx(1) -- Error Buzz (insufficient shares)
+            sfx(1) -- Error Buzz (margin call / insufficient net worth)
         end
     end
 
