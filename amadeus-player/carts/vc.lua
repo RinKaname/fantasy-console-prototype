@@ -189,7 +189,10 @@ function advance_month()
     end
 
     -- Add new deal flow
-    if #inbox < 5 and random_float() < 0.7 then
+    if #inbox == 0 then
+        -- Guarantee at least one deal if completely empty to prevent dry spells
+        table.insert(inbox, generate_startup())
+    elseif #inbox < 5 and random_float() < 0.7 then
         table.insert(inbox, generate_startup())
     end
 end
@@ -268,44 +271,52 @@ function _update()
     end
 
     -- Actions
-    if view_mode == "INBOX" and #inbox > 0 then
-        local p = inbox[selected_idx]
+    if view_mode == "INBOX" then
+        if #inbox > 0 then
+            local p = inbox[selected_idx]
 
-        -- Z: INVEST
-        if just_pressed(4) then
-            if fund.cash >= p.ask_amt then
-                fund.cash = fund.cash - p.ask_amt
-                fund.deployed = fund.deployed + p.ask_amt
+            -- Z: INVEST
+            if just_pressed(4) then
+                if fund.cash >= p.ask_amt then
+                    fund.cash = fund.cash - p.ask_amt
+                    fund.deployed = fund.deployed + p.ask_amt
 
-                p.player_eq = p.player_eq + p.ask_eq
-                p.player_inv = p.player_inv + p.ask_amt
-                p.is_follow_on = false
+                    p.player_eq = p.player_eq + p.ask_eq
+                    p.player_inv = p.player_inv + p.ask_amt
+                    p.is_follow_on = false
 
-                table.insert(portfolio, p)
+                    table.insert(portfolio, p)
+                    table.remove(inbox, selected_idx)
+                    if selected_idx > #inbox then selected_idx = #inbox end
+                    show_msg("INVESTED $" .. string.format("%.2f", p.ask_amt) .. "M IN " .. p.name, true)
+                    advance_month() -- Time passes when you make a deal
+                else
+                    show_msg("INSUFFICIENT FUNDS FOR THIS ROUND!", false)
+                end
+            end
+
+            -- X: PASS
+            if just_pressed(5) then
+                if p.is_follow_on then
+                    -- We passed on our own portfolio company's round!
+                    -- Dilute our equity by the new investors (simplified math: equity * (1 - new_investor_equity))
+                    p.player_eq = p.player_eq * (1.0 - p.ask_eq)
+                    p.is_follow_on = false
+                    table.insert(portfolio, p)
+                    show_msg("PASSED ON " .. p.name .. " ROUND. EQUITY DILUTED.", false)
+                else
+                    show_msg("PASSED ON " .. p.name, false)
+                end
                 table.remove(inbox, selected_idx)
                 if selected_idx > #inbox then selected_idx = #inbox end
-                show_msg("INVESTED $" .. string.format("%.2f", p.ask_amt) .. "M IN " .. p.name, true)
-                advance_month() -- Time passes when you make a deal
-            else
-                show_msg("INSUFFICIENT FUNDS FOR THIS ROUND!", false)
+                advance_month() -- Time passes when you pass on a deal
             end
-        end
-
-        -- X: PASS
-        if just_pressed(5) then
-            if p.is_follow_on then
-                -- We passed on our own portfolio company's round!
-                -- Dilute our equity by the new investors (simplified math: equity * (1 - new_investor_equity))
-                p.player_eq = p.player_eq * (1.0 - p.ask_eq)
-                p.is_follow_on = false
-                table.insert(portfolio, p)
-                show_msg("PASSED ON " .. p.name .. " ROUND. EQUITY DILUTED.", false)
-            else
-                show_msg("PASSED ON " .. p.name, false)
+        else
+            -- Inbox is empty. Allow player to advance time manually.
+            if just_pressed(5) then -- X button
+                show_msg("ADVANCING 1 MONTH...", true)
+                advance_month()
             end
-            table.remove(inbox, selected_idx)
-            if selected_idx > #inbox then selected_idx = #inbox end
-            advance_month() -- Time passes when you pass on a deal
         end
     end
 end
@@ -407,8 +418,12 @@ function _draw()
         fill_rect(0, 211, SCREEN_W, 29, C_BG)
         print(msg_text, 4, 220, C_HL)
     else
-        if view_mode == "INBOX" and #inbox > 0 then
-            print("Z: INVEST/FUND   X: PASS", 10, 220, C_HL)
+        if view_mode == "INBOX" then
+            if #inbox > 0 then
+                print("Z: INVEST/FUND   X: PASS", 10, 220, C_HL)
+            else
+                print("X: ADVANCE 1 MONTH", 10, 220, C_HL)
+            end
         else
             print("ARROWS: NAVIGATE", 10, 220, C_TEXT)
         end
