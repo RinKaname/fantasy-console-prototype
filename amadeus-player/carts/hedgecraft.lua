@@ -27,6 +27,9 @@ compliance_spend = 5000000 -- $50k per month initially
 base_opex = 10000000       -- $100k per month fixed cost
 sec_heat = 0.0
 
+leverage = 1.0     -- Multiplier for returns (1.0 to 3.0)
+interest_rate = 0.05 -- 5% annual cost of borrowing
+
 last_return_pct = 0.0
 msg_text = ""
 msg_timer = 0
@@ -43,6 +46,7 @@ regimes = {
 current_regime = 1
 
 view_mode = "DASH" -- "DASH" or "OPS"
+dash_idx = 1 -- 1: Compliance, 2: Leverage
 ops_idx = 1
 
 -- Staffing Roster
@@ -150,13 +154,28 @@ function advance_month()
     -- Add market noise
     local noise = random_normal() * base_vol
 
-    -- Apply Liquidity consistency factor
-    local gross_return = (alpha + noise) / regime.liq
+    -- Apply Liquidity consistency factor and Leverage
+    local gross_return = ((alpha + noise) / regime.liq) * leverage
     last_return_pct = gross_return * 100.0
 
-    -- 2. Apply Returns to total AUM
+    -- 2. Apply Returns and Leverage Costs to total AUM
     local monthly_profit = math.floor(total_aum * gross_return)
-    total_aum = total_aum + monthly_profit
+
+    -- Calculate Margin Interest
+    -- If leverage > 1.0, we borrowed money: Borrowed = AUM * (leverage - 1.0)
+    local borrowed_cash = math.floor(total_aum * (leverage - 1.0))
+    local margin_interest = math.floor(borrowed_cash * (interest_rate / 12.0))
+
+    total_aum = total_aum + monthly_profit - margin_interest
+
+    -- Margin Call Check: If losses drop AUM too low relative to borrowed cash
+    -- Very simplified: if Equity drops below 10% of total position, instant wipeout
+    local total_position = total_aum + borrowed_cash
+    if total_position > 0 and (total_aum / total_position) < 0.10 then
+        game_state = "GAMEOVER_MARGIN"
+        sfx(1)
+        return
+    end
 
     if total_aum < 0 then total_aum = 0 end
 
@@ -233,7 +252,24 @@ function advance_month()
             return
         end
 
-        show_msg("YEAR END. FEES EARNED: " .. format_money(total_fees), true)
+        -- 7. LP Redemptions
+        -- If we missed the 8% hurdle, LPs might pull out money, especially if it's a negative year.
+        local redemptions = 0
+        if annual_return_raw < 0.0 then
+            -- Panic! Redemptions scale with the loss and the current regime's volatility
+            local panic_factor = math.abs(annual_return_raw) * (random_float() * regime.vol * 3.0)
+            -- Cap panic at 40% of AUM walking out
+            if panic_factor > 0.40 then panic_factor = 0.40 end
+
+            redemptions = math.floor(total_aum * panic_factor)
+            total_aum = total_aum - redemptions
+        end
+
+        if redemptions > 0 then
+            show_msg("FEES: " .. format_money(total_fees) .. " | REDEMPTIONS: " .. format_money(redemptions), false)
+        else
+            show_msg("YEAR END. FEES EARNED: " .. format_money(total_fees), true)
+        end
 
         -- Reset for next year
         year_start_aum = total_aum
@@ -262,30 +298,51 @@ function _update()
     ticks = ticks + 1
     if msg_timer > 0 then msg_timer = msg_timer - 1 end
 
-    if game_state == "GAMEOVER_CASH" or game_state == "GAMEOVER_SEC" then
+    if game_state == "GAMEOVER_CASH" or game_state == "GAMEOVER_SEC" or game_state == "GAMEOVER_MARGIN" or game_state == "GAMEOVER_REVOLT" then
         if just_pressed(4) then _init() end
         return
     end
 
     if game_state == "PLAY" then
-        -- Toggle Views
-        if just_pressed(0) then
-            view_mode = "DASH"
-            sfx(2)
-        elseif just_pressed(1) then
-            view_mode = "OPS"
-            sfx(2)
-        end
+        -- Toggle Views (Use Left/Right ONLY when not interacting with numbers)
+        -- Actually, let's use Z/X to toggle tabs if we want arrows for 2D menu?
+        -- No, let's use UP/DOWN to select parameter in DASH, and LEFT/RIGHT to change it.
 
         if view_mode == "DASH" then
-            -- Adjust Compliance Spend
+            -- Select parameter
             if just_pressed(2) then -- UP
-                compliance_spend = compliance_spend + 1000000 -- +$10k
-                sfx(0)
+                dash_idx = 1
+                sfx(2)
             elseif just_pressed(3) then -- DOWN
-                compliance_spend = math.max(0, compliance_spend - 1000000) -- -$10k
-                sfx(0)
+                dash_idx = 2
+                sfx(2)
             end
+
+            -- Adjust parameter
+            if dash_idx == 1 then
+                -- Compliance
+                if just_pressed(1) then -- RIGHT
+                    compliance_spend = compliance_spend + 1000000
+                    sfx(0)
+                elseif just_pressed(0) then -- LEFT
+                    compliance_spend = math.max(0, compliance_spend - 1000000)
+                    sfx(0)
+                end
+            elseif dash_idx == 2 then
+                -- Leverage
+                if just_pressed(1) then -- RIGHT
+                    leverage = math.min(3.0, leverage + 0.1)
+                    sfx(0)
+                elseif just_pressed(0) then -- LEFT
+                    leverage = math.max(1.0, leverage - 0.1)
+                    sfx(0)
+                end
+            end
+
+            -- Toggle to OPS using Z if not raising? Wait, let's keep it simple.
+            -- Z is Raise Capital. X is Advance Month.
+            -- How to toggle tabs? We have 8 buttons: Left, Right, Up, Down, Z, X, Enter (6), Select (7)
+            if just_pressed(6) then view_mode = "OPS"; sfx(2) end
 
             -- Raise Capital (Z)
             if just_pressed(4) then
@@ -308,6 +365,9 @@ function _update()
                 end
             end
         elseif view_mode == "OPS" then
+            -- Toggle back to DASH
+            if just_pressed(6) then view_mode = "DASH"; sfx(2) end
+
             -- Scroll Ops
             if just_pressed(2) then
                 ops_idx = ops_idx - 1
@@ -408,23 +468,31 @@ function _draw()
 
         if view_mode == "DASH" then
             -- REGIME & RISK
-            print("MARKET REGIME:", 4, 70, C_TEXT)
+            print("MARKET REGIME:", 4, 68, C_TEXT)
             local reg_name = regimes[current_regime].name
-            print(reg_name, 100, 70, C_HL)
+            print(reg_name, 100, 68, C_HL)
 
             local heat_col = sec_heat > 0.3 and C_TEXT or C_HL
             if sec_heat > 0.6 then heat_col = C_BG end
-            print("SEC HEAT: " .. string.format("%.1f%%", sec_heat * 100), 4, 82, heat_col)
+            print("SEC HEAT: " .. string.format("%.1f%%", sec_heat * 100), 4, 78, heat_col)
 
-            draw_line(0, 94, SCREEN_W, 94, C_DIM)
+            draw_line(0, 88, SCREEN_W, 88, C_DIM)
 
-            -- COMPLIANCE SLIDER
-            print("COMPLIANCE SPEND (UP/DWN):", 4, 102, C_HL)
-            print(format_money(compliance_spend) .. "/MO", 20, 114, C_TEXT)
+            -- CONTROLS
+            local c_col = dash_idx == 1 and C_HL or C_TEXT
+            local l_col = dash_idx == 2 and C_HL or C_TEXT
+
+            if dash_idx == 1 then print(">", 4, 96, C_HL) end
+            print("COMPLIANCE: " .. format_money(compliance_spend) .. "/MO", 12, 96, c_col)
+
+            if dash_idx == 2 then print(">", 4, 108, C_HL) end
+            print("LEVERAGE:   " .. string.format("%.1fx", leverage), 12, 108, l_col)
+
+            draw_line(0, 120, SCREEN_W, 120, C_DIM)
 
             -- NOTIFICATIONS
             if msg_timer > 0 then
-                print(">> " .. msg_text, 4, 140, C_TEXT)
+                print(">> " .. msg_text, 4, 130, C_TEXT)
             end
 
         elseif view_mode == "OPS" then
@@ -475,6 +543,12 @@ function _draw()
         fill_rect(32, 92, 192, 46, C_BG)
         print("SEC RAID & ASSET FREEZE", 50, 100, C_HL)
         print("COMPLIANCE FAILURES DETECTED", 45, 110, C_TEXT)
+        print("PRESS Z TO RESTART", 60, 124, C_DIM)
+    elseif game_state == "GAMEOVER_MARGIN" then
+        fill_rect(20, 90, 216, 50, C_HL)
+        fill_rect(22, 92, 212, 46, C_BG)
+        print("MARGIN CALL", 85, 100, C_HL)
+        print("LEVERAGE WIPED OUT FIRM EQUITY", 25, 110, C_TEXT)
         print("PRESS Z TO RESTART", 60, 124, C_DIM)
     elseif game_state == "GAMEOVER_REVOLT" then
         fill_rect(20, 90, 216, 50, C_HL)
