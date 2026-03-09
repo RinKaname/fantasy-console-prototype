@@ -31,6 +31,24 @@ last_return_pct = 0.0
 msg_text = ""
 msg_timer = 0
 
+view_mode = "DASH" -- "DASH" or "OPS"
+ops_idx = 1
+
+-- Staffing Roster
+staff = {
+    pm = 1,    -- Portfolio Managers ($30k/mo, +500M Capacity)
+    quant = 0, -- Quant Researchers ($25k/mo, +0.5% Base Alpha)
+    risk = 0,  -- Risk Managers ($20k/mo, -0.5% Volatility)
+    comp = 0   -- Compliance Officers ($15k/mo, -1.0% SEC Heat)
+}
+
+roles = {
+    { id="pm", name="PORTFOLIO MANAGER", cost=3000000, desc="+500M ALPHA CAPACITY" },
+    { id="quant", name="QUANT RESEARCHER", cost=2500000, desc="+0.5% BASE ALPHA" },
+    { id="risk", name="RISK MANAGER", cost=2000000, desc="-0.5% VOLATILITY" },
+    { id="comp", name="COMPLIANCE OFFICER", cost=1500000, desc="-1.0% SEC HEAT/MO" }
+}
+
 -- PRNG
 function random_float()
     rng_seed = (rng_seed * 1103515245 + 12345) % 2147483648
@@ -95,13 +113,20 @@ function advance_month()
     month = month + 1
 
     -- 1. Calculate Gross Return (Alpha Decay + Volatility)
-    -- As AUM approaches $1B, alpha decays towards 0.
-    local capacity_limit = 1 * BILLION
+    -- Capacity expands by $500M per PM
+    local capacity_limit = (500 * MILLION) + (staff.pm * 500 * MILLION)
     local utilization = total_aum / capacity_limit
-    local alpha = 0.02 * math.exp(-2.0 * utilization) -- 2% monthly base alpha, decays exponentially
 
-    -- Add market noise (volatility clustering simplified)
-    local noise = random_normal() * 0.03 -- 3% monthly standard deviation
+    -- Base Alpha increases by 0.5% per Quant
+    local base_alpha = 0.02 + (staff.quant * 0.005)
+    local alpha = base_alpha * math.exp(-2.0 * utilization)
+
+    -- Volatility decreases by 0.5% per Risk Manager (min 1%)
+    local base_vol = 0.03 - (staff.risk * 0.005)
+    if base_vol < 0.01 then base_vol = 0.01 end
+
+    -- Add market noise
+    local noise = random_normal() * base_vol
 
     local gross_return = alpha + noise
     last_return_pct = gross_return * 100.0
@@ -152,7 +177,14 @@ function advance_month()
     local aum_m = total_aum / MILLION
     if aum_m < 1 then aum_m = 1 end
     local scaling_cost = math.floor(1000000 * math.log(aum_m)) -- $10k per log unit
-    local total_opex = base_opex + scaling_cost + compliance_spend
+
+    -- Staffing costs
+    local staff_cost = (staff.pm * roles[1].cost) +
+                       (staff.quant * roles[2].cost) +
+                       (staff.risk * roles[3].cost) +
+                       (staff.comp * roles[4].cost)
+
+    local total_opex = base_opex + scaling_cost + compliance_spend + staff_cost
 
     -- Update GP Cash
     gp_cash = gp_cash + total_mgmt_fee + total_perf_fee - total_opex
@@ -177,6 +209,9 @@ function advance_month()
         -- Cool down
         sec_heat = math.max(0.0, sec_heat - 0.02)
     end
+
+    -- Compliance Officers passively reduce heat
+    sec_heat = math.max(0.0, sec_heat - (staff.comp * 0.01))
 
     if random_float() < sec_heat then
         game_state = "GAMEOVER_SEC"
@@ -210,30 +245,76 @@ function _update()
     end
 
     if game_state == "PLAY" then
-        -- Adjust Compliance Spend
-        if just_pressed(2) then -- UP
-            compliance_spend = compliance_spend + 1000000 -- +$10k
-            sfx(0)
-        elseif just_pressed(3) then -- DOWN
-            compliance_spend = math.max(0, compliance_spend - 1000000) -- -$10k
-            sfx(0)
+        -- Toggle Views
+        if just_pressed(0) then
+            view_mode = "DASH"
+            sfx(2)
+        elseif just_pressed(1) then
+            view_mode = "OPS"
+            sfx(2)
         end
 
-        -- Raise Capital (Z)
-        if just_pressed(4) then
-            -- Can only raise if recent returns were good, simplified: random chance based on AUM
-            if total_aum < 5 * BILLION then
-                local raise_amt = math.floor((total_aum * 0.20) / MILLION) * MILLION -- Raise 20% of current AUM
-                if raise_amt < 10 * MILLION then raise_amt = 10 * MILLION end
-                new_series(raise_amt)
-                show_msg("RAISED " .. format_money(raise_amt) .. " IN NEW SERIES!", true)
-            else
-                show_msg("CAPACITY REACHED. NO NEW LPs.", false)
+        if view_mode == "DASH" then
+            -- Adjust Compliance Spend
+            if just_pressed(2) then -- UP
+                compliance_spend = compliance_spend + 1000000 -- +$10k
+                sfx(0)
+            elseif just_pressed(3) then -- DOWN
+                compliance_spend = math.max(0, compliance_spend - 1000000) -- -$10k
+                sfx(0)
+            end
+
+            -- Raise Capital (Z)
+            if just_pressed(4) then
+                -- Check capacity logic
+                local capacity_limit = (500 * MILLION) + (staff.pm * 500 * MILLION)
+                if total_aum < capacity_limit * 0.9 then
+                    local raise_amt = math.floor((total_aum * 0.20) / MILLION) * MILLION -- Raise 20% of current AUM
+                    if raise_amt < 10 * MILLION then raise_amt = 10 * MILLION end
+                    new_series(raise_amt)
+                    show_msg("RAISED " .. format_money(raise_amt) .. " IN NEW SERIES!", true)
+                else
+                    show_msg("FIRM CAPACITY REACHED. HIRE MORE PMs.", false)
+                end
+            end
+        elseif view_mode == "OPS" then
+            -- Scroll Ops
+            if just_pressed(2) then
+                ops_idx = ops_idx - 1
+                if ops_idx < 1 then ops_idx = #roles end
+                sfx(2)
+            elseif just_pressed(3) then
+                ops_idx = ops_idx + 1
+                if ops_idx > #roles then ops_idx = 1 end
+                sfx(2)
+            end
+
+            -- Hire (Z)
+            if just_pressed(4) then
+                local role_id = roles[ops_idx].id
+                staff[role_id] = staff[role_id] + 1
+                show_msg("HIRED 1 " .. roles[ops_idx].name, true)
+            end
+
+            -- Fire (X)
+            if just_pressed(5) then
+                local role_id = roles[ops_idx].id
+                if staff[role_id] > 0 then
+                    -- Prevent firing last PM
+                    if role_id == "pm" and staff.pm <= 1 then
+                        show_msg("CANNOT FIRE SOLE PORTFOLIO MANAGER", false)
+                    else
+                        staff[role_id] = staff[role_id] - 1
+                        show_msg("FIRED 1 " .. roles[ops_idx].name, true)
+                    end
+                else
+                    show_msg("NO STAFF TO FIRE", false)
+                end
             end
         end
 
-        -- Advance Month (X)
-        if just_pressed(5) then
+        -- Advance Month (X) only in DASH
+        if view_mode == "DASH" and just_pressed(5) then
             advance_month()
         end
     end
@@ -285,25 +366,61 @@ function _draw()
     draw_line(0, 47, SCREEN_W, 47, C_TEXT)
 
     if game_state == "PLAY" then
-        -- COMPLIANCE SLIDER
-        print("COMPLIANCE SPEND (UP/DWN): " .. format_money(compliance_spend) .. "/MO", 4, 55, C_TEXT)
-        draw_line(0, 65, SCREEN_W, 65, C_DIM)
 
-        -- SERIES BREAKDOWN
-        print("ACTIVE SERIES ACCOUNTING (HWM)", 4, 72, C_HL)
+        -- TAB HEADERS
+        local d_col = view_mode == "DASH" and C_HL or C_DIM
+        local o_col = view_mode == "OPS" and C_HL or C_DIM
+        print("< DASHBOARD >", 20, 52, d_col)
+        print("< OPERATIONS >", 130, 52, o_col)
+        draw_line(0, 62, SCREEN_W, 62, C_DIM)
 
-        local start_idx = math.max(1, #series_list - 5)
-        for i = start_idx, #series_list do
-            local s = series_list[i]
-            local y = 84 + ((i - start_idx) * 16)
+        if view_mode == "DASH" then
+            -- COMPLIANCE SLIDER
+            print("COMPLIANCE (UP/DWN): " .. format_money(compliance_spend) .. "/MO", 4, 70, C_TEXT)
+            draw_line(0, 80, SCREEN_W, 80, C_DIM)
 
-            local nav_str = string.format("%.3f", s.nav_per_share)
-            local hwm_str = string.format("%.3f", s.hwm)
+            -- SERIES BREAKDOWN
+            print("ACTIVE SERIES ACCOUNTING (HWM)", 4, 88, C_HL)
 
-            local col = C_TEXT
-            if s.nav_per_share > s.hwm then col = C_HL end
+            local start_idx = math.max(1, #series_list - 5)
+            for i = start_idx, #series_list do
+                local s = series_list[i]
+                local y = 100 + ((i - start_idx) * 16)
 
-            print("S" .. tostring(s.id) .. " NAV: " .. nav_str .. " | HWM: " .. hwm_str, 8, y, col)
+                local nav_str = string.format("%.3f", s.nav_per_share)
+                local hwm_str = string.format("%.3f", s.hwm)
+
+                local col = C_TEXT
+                if s.nav_per_share > s.hwm then col = C_HL end
+
+                print("S" .. tostring(s.id) .. " NAV: " .. nav_str .. " | HWM: " .. hwm_str, 8, y, col)
+            end
+
+        elseif view_mode == "OPS" then
+            print("PERSONNEL ROSTER", 4, 70, C_HL)
+            local aum_m = total_aum / MILLION
+            if aum_m < 1 then aum_m = 1 end
+            local scaling_cost = math.floor(1000000 * math.log(aum_m))
+            local staff_cost = (staff.pm * roles[1].cost) + (staff.quant * roles[2].cost) + (staff.risk * roles[3].cost) + (staff.comp * roles[4].cost)
+            local total_opex = base_opex + scaling_cost + compliance_spend + staff_cost
+
+            print("MONTHLY BURN: " .. format_money(total_opex), 4, 82, C_TEXT)
+
+            for i=1, #roles do
+                local r = roles[i]
+                local count = staff[r.id]
+                local y = 105 + ((i-1) * 25)
+
+                local col = C_TEXT
+                if i == ops_idx then
+                    col = C_HL
+                    print(">", 4, y, C_HL)
+                end
+
+                print(r.name .. " x" .. tostring(count), 14, y, col)
+                print(r.desc, 14, y + 10, C_DIM)
+                print(format_money(r.cost), 200, y, col)
+            end
         end
 
         -- FOOTER
@@ -312,8 +429,13 @@ function _draw()
             fill_rect(0, 206, SCREEN_W, 34, C_BG)
             print(msg_text, 4, 216, C_HL)
         else
-            print("Z: RAISE CAPITAL", 10, 212, C_HL)
-            print("X: ADVANCE 1 MONTH", 10, 224, C_HL)
+            if view_mode == "DASH" then
+                print("Z: RAISE CAPITAL", 10, 212, C_HL)
+                print("X: ADVANCE 1 MONTH", 10, 224, C_HL)
+            else
+                print("Z: HIRE", 10, 212, C_HL)
+                print("X: FIRE", 10, 224, C_HL)
+            end
         end
 
     elseif game_state == "GAMEOVER_CASH" then
