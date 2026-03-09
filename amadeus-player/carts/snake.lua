@@ -37,6 +37,7 @@ function _init()
     dir_y = 0
     score = 0
     game_over = false
+    tick_rate = 6
 
     place_apple()
     sfx(3) -- System Startup
