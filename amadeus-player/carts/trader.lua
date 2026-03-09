@@ -64,19 +64,39 @@ end
 
 function change_economy()
     local r = random_float()
-    if r < 0.33 then
-        economy = "BOOM"
-        news_ticker = "NEWS: TECH SECTOR INNOVATION DRIVES MASSIVE MARKET BOOM!"
-        sfx(3) -- Startup sound
-    elseif r < 0.66 then
-        economy = "BUST"
-        news_ticker = "NEWS: MAJOR DATA BREACH AT SERN. MARKET CRASH IMMINENT!"
-        sfx(1) -- Error buzz
+
+    if economy == "STABLE" then
+        -- 40% BOOM, 40% BUST, 20% STAY STABLE
+        if r < 0.40 then
+            economy = "BOOM"
+            news_ticker = "NEWS: TECH SECTOR INNOVATION DRIVES MASSIVE MARKET BOOM!"
+            sfx(3) -- Startup sound
+        elseif r < 0.80 then
+            economy = "BUST"
+            news_ticker = "NEWS: MAJOR DATA BREACH AT SERN. MARKET CRASH IMMINENT!"
+            sfx(1) -- Error buzz
+        else
+            economy = "STABLE"
+            news_ticker = "NEWS: MARKET REMAINS STEADY AMID GLOBAL UNCERTAINTY."
+            sfx(2) -- Click
+        end
     else
-        economy = "STABLE"
-        news_ticker = "NEWS: MARKET RETURNS TO NORMAL FOLLOWING RECENT VOLATILITY."
-        sfx(2) -- Click
+        -- If already in BOOM or BUST, highly likely (80%) to revert to STABLE
+        if r < 0.80 then
+            economy = "STABLE"
+            news_ticker = "NEWS: MARKET RETURNS TO NORMAL FOLLOWING RECENT VOLATILITY."
+            sfx(2) -- Click
+        elseif r < 0.90 then
+            economy = "BOOM"
+            news_ticker = "NEWS: BULL MARKET CONTINUES ITS HISTORIC RUN!"
+            sfx(3)
+        else
+            economy = "BUST"
+            news_ticker = "NEWS: PANIC SELLING DEEPENS THE ONGOING CRASH!"
+            sfx(1)
+        end
     end
+
     news_x = SCREEN_W
 end
 
@@ -162,8 +182,9 @@ function _update()
 
     -- Update Market every 15 frames (4 ticks a second)
     if ticks % 15 == 0 then
-        -- Random chance to change economy state (roughly every 30 seconds)
-        if random_float() < 0.015 then
+        -- Random chance to change economy state (roughly every 12 seconds)
+        -- Increased from 1.5% to 3.5%
+        if random_float() < 0.035 then
             change_economy()
         end
 
