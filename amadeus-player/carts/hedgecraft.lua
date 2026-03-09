@@ -374,26 +374,38 @@ function _update()
                 sfx(2)
             end
 
+            -- Multiplier for hiring/firing
+            local batch = (btn(0) or btn(1)) and 10 or 1
+
             -- Hire (Z)
             if just_pressed(4) then
                 local role_id = roles[ops_idx].id
-                staff[role_id] = staff[role_id] + 1
-                show_msg("HIRED 1 " .. roles[ops_idx].name, true)
+                staff[role_id] = staff[role_id] + batch
+                show_msg("HIRED " .. batch .. " " .. roles[ops_idx].name, true)
             end
 
             -- Fire (X)
             if just_pressed(5) then
                 local role_id = roles[ops_idx].id
-                if staff[role_id] > 0 then
-                    -- Prevent firing last PM
-                    if role_id == "pm" and staff.pm <= 1 then
+                local to_fire = batch
+
+                -- Clamp firing to current staff count
+                if to_fire > staff[role_id] then to_fire = staff[role_id] end
+
+                -- Prevent firing last PM
+                if role_id == "pm" and (staff.pm - to_fire) < 1 then
+                    to_fire = staff.pm - 1
+                end
+
+                if to_fire > 0 then
+                    staff[role_id] = staff[role_id] - to_fire
+                    show_msg("FIRED " .. to_fire .. " " .. roles[ops_idx].name, true)
+                else
+                    if role_id == "pm" and staff.pm == 1 then
                         show_msg("CANNOT FIRE SOLE PORTFOLIO MANAGER", false)
                     else
-                        staff[role_id] = staff[role_id] - 1
-                        show_msg("FIRED 1 " .. roles[ops_idx].name, true)
+                        show_msg("NO STAFF TO FIRE", false)
                     end
-                else
-                    show_msg("NO STAFF TO FIRE", false)
                 end
             end
         end
@@ -525,8 +537,8 @@ function _draw()
             print("Z: RAISE CAPITAL", 10, 212, C_HL)
             print("X: ADVANCE 1 MONTH", 10, 224, C_HL)
         else
-            print("Z: HIRE", 10, 212, C_HL)
-            print("X: FIRE", 10, 224, C_HL)
+            print("Z: HIRE    (HOLD L/R", 10, 212, C_HL)
+            print("X: FIRE     FOR 10X)", 10, 224, C_HL)
         end
 
     elseif game_state == "GAMEOVER_CASH" then
