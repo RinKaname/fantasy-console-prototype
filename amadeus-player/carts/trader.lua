@@ -186,6 +186,40 @@ function _update()
         end
     end
 
+    -- Process daily events every 180 frames (approx 3 seconds = 1 day)
+    if ticks % 180 == 0 then
+        days = days + 1
+        -- 5% chance per day for a random stock to issue a dividend
+        if random_float() < 0.05 then
+            local s_idx = math.floor(random_float() * 3) + 1
+            local st = stocks[s_idx]
+            local yield = 0.02 + (random_float() * 0.04) -- 2% to 6% yield
+
+            local payout = 0
+            if st.owned > 0 then
+                payout = st.owned * (st.price * yield)
+                cash = cash + payout
+            elseif st.owned < 0 then
+                -- If shorting, you owe the dividend!
+                payout = st.owned * (st.price * yield)
+                cash = cash + payout -- payout is negative, subtracts cash
+            end
+
+            local y_str = tostring(math.floor(yield * 100))
+            if payout > 0 then
+                news_ticker = "NEWS: " .. st.name .. " ISSUES " .. y_str .. "% DIVIDEND. YOU RECEIVED $" .. to_fixed2(payout) .. "!"
+                sfx(0) -- Blip (Good)
+            elseif payout < 0 then
+                news_ticker = "NEWS: " .. st.name .. " ISSUES " .. y_str .. "% DIVIDEND. SHORT SELLERS PAY $" .. to_fixed2(math.abs(payout)) .. "!"
+                sfx(1) -- Buzz (Bad)
+            else
+                news_ticker = "NEWS: " .. st.name .. " ISSUES " .. y_str .. "% DIVIDEND. YOU OWN 0 SHARES."
+                sfx(2) -- Click
+            end
+            news_x = SCREEN_W
+        end
+    end
+
     -- Update Market every 15 frames (4 ticks a second)
     if ticks % 15 == 0 then
         -- Random chance to change economy state (roughly every 12 seconds)
