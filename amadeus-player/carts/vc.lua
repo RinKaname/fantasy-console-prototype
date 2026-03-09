@@ -15,7 +15,8 @@ fund = {
     deployed = 0.0,
     returned = 0.0,
     month = 1,
-    max_months = 120 -- 10 year fund
+    max_months = 120, -- 10 year fund
+    player_wealth = 0.0 -- The GP's personal wealth from fees and carry
 }
 
 -- Game State
@@ -82,8 +83,42 @@ function show_msg(text, is_good)
     if is_good then sfx(0) else sfx(1) end
 end
 
+function process_payout(payout)
+    -- Calculate 20% Carry if we passed the hurdle rate (the total $10M fund size)
+    local prev_returned = fund.returned
+    fund.returned = fund.returned + payout
+
+    local carry = 0.0
+    if fund.returned > fund.total then
+        -- We are in profit!
+        local profit = 0.0
+        if prev_returned < fund.total then
+            -- Only the portion above the 10M hurdle counts for carry
+            profit = fund.returned - fund.total
+        else
+            -- Every dollar is pure profit now
+            profit = payout
+        end
+        carry = profit * 0.20 -- 20% Carried Interest
+    end
+
+    fund.player_wealth = fund.player_wealth + carry
+    -- The fund keeps the rest of the cash
+    fund.cash = fund.cash + (payout - carry)
+
+    return carry
+end
+
 function advance_month()
     fund.month = fund.month + 1
+
+    -- Charge 2% Management Fee (0.02 * 10M / 12 months = ~$0.0166M per month)
+    local mgmt_fee = (fund.total * 0.02) / 12.0
+    if fund.cash >= mgmt_fee then
+        fund.cash = fund.cash - mgmt_fee
+        fund.player_wealth = fund.player_wealth + mgmt_fee
+    end
+
     if fund.month > fund.max_months then
         game_state = "GAMEOVER"
         sfx(3)
@@ -109,9 +144,11 @@ function advance_month()
                     -- EXIT!
                     local exit_val = p.valuation * (2.0 + (random_float() * 3.0))
                     local payout = exit_val * p.player_eq
-                    fund.returned = fund.returned + payout
-                    fund.cash = fund.cash + payout
-                    show_msg("EXIT! " .. p.name .. " ACQUIRED FOR $" .. string.format("%.1f", exit_val) .. "M! Payout: $" .. string.format("%.2f", payout) .. "M", true)
+                    local carry = process_payout(payout)
+
+                    local msg = "EXIT! " .. p.name .. " ACQUIRED FOR $" .. string.format("%.1f", exit_val) .. "M!"
+                    if carry > 0 then msg = msg .. " (CARRY: $" .. string.format("%.2f", carry) .. "M)" end
+                    show_msg(msg, true)
                     sfx(3)
                     table.remove(portfolio, i)
                 else
@@ -140,9 +177,11 @@ function advance_month()
             elseif event_roll > 0.99 then
                 local exit_val = p.valuation * 1.5
                 local payout = exit_val * p.player_eq
-                fund.returned = fund.returned + payout
-                fund.cash = fund.cash + payout
-                show_msg("EARLY EXIT! " .. p.name .. " Acqui-hired! Payout: $" .. string.format("%.2f", payout) .. "M", true)
+                local carry = process_payout(payout)
+
+                local msg = "EARLY EXIT! " .. p.name .. " ACQUIRED!"
+                if carry > 0 then msg = msg .. " (CARRY: $" .. string.format("%.2f", carry) .. "M)" end
+                show_msg(msg, true)
                 sfx(3)
                 table.remove(portfolio, i)
             end
@@ -159,6 +198,7 @@ function _init()
     fund.cash = fund.total
     fund.deployed = 0.0
     fund.returned = 0.0
+    fund.player_wealth = 0.0
     fund.month = 1
     inbox = {}
     portfolio = {}
@@ -309,10 +349,10 @@ function _draw()
     print("MONTH: " .. tostring(fund.month) .. "/" .. tostring(fund.max_months), 180, 4, C_TEXT)
 
     local mult = (fund.returned + fund.portfolio_val(portfolio)) / fund.total
-    print("CASH: $" .. string.format("%.2f", fund.cash) .. "M", 4, 16, C_HL)
-    print("DEPLOYED: $" .. string.format("%.2f", fund.deployed) .. "M", 4, 26, C_TEXT)
-    print("RETURNED: $" .. string.format("%.2f", fund.returned) .. "M", 130, 16, C_HL)
-    print("TVPI: " .. string.format("%.2f", mult) .. "x", 130, 26, C_TEXT)
+    print("FUND CASH: $" .. string.format("%.2f", fund.cash) .. "M", 4, 16, C_HL)
+    print("RETURNED:  $" .. string.format("%.2f", fund.returned) .. "M", 4, 26, C_TEXT)
+    print("WEALTH: $" .. string.format("%.2f", fund.player_wealth) .. "M", 150, 16, C_HL)
+    print("TVPI: " .. string.format("%.2f", mult) .. "x", 150, 26, C_TEXT)
 
     draw_line(0, 37, SCREEN_W, 37, C_TEXT)
 
@@ -381,11 +421,12 @@ function _draw()
         print("AMADEUS VENTURES", 70, 100, C_HL)
         print("PRESS Z TO RAISE FUND I", 56, 112, C_TEXT)
     elseif game_state == "GAMEOVER" then
-        fill_rect(40, 90, 176, 50, C_HL)
-        fill_rect(42, 92, 172, 46, C_BG)
-        print("FUND LIFECYCLE COMPLETE", 50, 100, C_HL)
-        print("FINAL MULTIPLE: " .. string.format("%.2f", mult) .. "x", 60, 112, C_TEXT)
-        print("PRESS Z TO START FUND II", 55, 124, C_DIM)
+        fill_rect(40, 85, 176, 60, C_HL)
+        fill_rect(42, 87, 172, 56, C_BG)
+        print("FUND LIFECYCLE COMPLETE", 50, 95, C_HL)
+        print("FINAL MULTIPLE: " .. string.format("%.2f", mult) .. "x", 50, 107, C_TEXT)
+        print("YOUR WEALTH: $" .. string.format("%.2f", fund.player_wealth) .. "M", 50, 117, C_HL)
+        print("PRESS Z TO START FUND II", 55, 130, C_DIM)
     end
 end
 
