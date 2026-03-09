@@ -14,6 +14,7 @@ ticks = 0
 days = 1
 cash = 1000.00
 net_worth = 1000.00
+rng_seed = 12345
 
 -- Stocks
 stocks = {
@@ -39,8 +40,11 @@ news_x = SCREEN_W
 
 -- Pseudo-Random (since we don't have math.random imported yet)
 function random_float()
-    local a = (ticks * 1103515245 + 12345) % 2147483648
-    return (a / 2147483648)
+    -- Standard POSIX LCG formula that updates the persistent seed
+    rng_seed = (rng_seed * 1103515245 + 12345) % 2147483648
+    -- Mix in ticks occasionally just in case
+    local mixed = (rng_seed + (ticks * 73)) % 2147483648
+    return (mixed / 2147483648)
 end
 
 function get_price_change(volatility)
@@ -115,6 +119,8 @@ btn_state = {false, false, false, false, false, false, false, false}
 function just_pressed(b)
     if btn(b) and not btn_state[b] then
         btn_state[b] = true
+        -- Add human entropy to the RNG seed based on when they pressed it
+        rng_seed = (rng_seed + ticks + b * 91) % 2147483648
         return true
     end
     if not btn(b) then
