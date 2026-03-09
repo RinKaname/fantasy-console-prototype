@@ -255,8 +255,11 @@ function _update()
         sfx(2)
     end
 
-    -- List Scrolling
+    -- Safety clamp before logic
     local current_list = (view_mode == "INBOX") and inbox or portfolio
+    if selected_idx > #current_list then selected_idx = math.max(1, #current_list) end
+
+    -- List Scrolling
     local max_idx = #current_list
     if max_idx < 1 then max_idx = 1 end
 
@@ -272,7 +275,7 @@ function _update()
 
     -- Actions
     if view_mode == "INBOX" then
-        if #inbox > 0 then
+        if #inbox > 0 and inbox[selected_idx] ~= nil then
             local p = inbox[selected_idx]
 
             -- Z: INVEST
