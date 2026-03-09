@@ -304,9 +304,12 @@ function _update()
     end
 
     if game_state == "PLAY" then
-        -- Toggle Views (Use Left/Right ONLY when not interacting with numbers)
-        -- Actually, let's use Z/X to toggle tabs if we want arrows for 2D menu?
-        -- No, let's use UP/DOWN to select parameter in DASH, and LEFT/RIGHT to change it.
+        -- Toggle Views using Select (btn 7)
+        if just_pressed(7) then
+            if view_mode == "DASH" then view_mode = "OPS"
+            else view_mode = "DASH" end
+            sfx(2)
+        end
 
         if view_mode == "DASH" then
             -- Select parameter
@@ -339,11 +342,6 @@ function _update()
                 end
             end
 
-            -- Toggle to OPS using Z if not raising? Wait, let's keep it simple.
-            -- Z is Raise Capital. X is Advance Month.
-            -- How to toggle tabs? We have 8 buttons: Left, Right, Up, Down, Z, X, Enter (6), Select (7)
-            if just_pressed(6) then view_mode = "OPS"; sfx(2) end
-
             -- Raise Capital (Z)
             if just_pressed(4) then
                 -- Check capacity logic
@@ -365,9 +363,6 @@ function _update()
                 end
             end
         elseif view_mode == "OPS" then
-            -- Toggle back to DASH
-            if just_pressed(6) then view_mode = "DASH"; sfx(2) end
-
             -- Scroll Ops
             if just_pressed(2) then
                 ops_idx = ops_idx - 1
@@ -462,8 +457,10 @@ function _draw()
         -- TAB HEADERS
         local d_col = view_mode == "DASH" and C_HL or C_DIM
         local o_col = view_mode == "OPS" and C_HL or C_DIM
-        print("< DASHBOARD >", 20, 52, d_col)
-        print("< OPERATIONS >", 130, 52, o_col)
+        print("DASHBOARD", 20, 52, d_col)
+        print("OPERATIONS", 130, 52, o_col)
+        -- Show hint to use SHIFT to toggle tabs
+        print("[SHIFT]", 210, 52, C_TEXT)
         draw_line(0, 62, SCREEN_W, 62, C_DIM)
 
         if view_mode == "DASH" then
