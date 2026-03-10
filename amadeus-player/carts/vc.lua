@@ -174,16 +174,30 @@ function advance_month()
             if event_roll < 0.005 then
                 show_msg("SCANDAL! " .. p.name .. " founders arrested. Zeroed out.", false)
                 table.remove(portfolio, i)
-            elseif event_roll > 0.99 then
-                local exit_val = p.valuation * 1.5
-                local payout = exit_val * p.player_eq
-                local carry = process_payout(payout)
+            elseif event_roll > 0.98 and p.stage_idx >= 2 then
+                -- Generate a formal M&A Offer instead of an auto-exit
+                local offer_val = p.valuation * (1.5 + random_float())
 
-                local msg = "EARLY EXIT! " .. p.name .. " ACQUIRED!"
-                if carry > 0 then msg = msg .. " (CARRY: $" .. string.format("%.2f", carry) .. "M)" end
-                show_msg(msg, true)
-                sfx(3)
-                table.remove(portfolio, i)
+                -- We create a fake inbox item to represent the offer
+                local offer = {
+                    id = ticks,
+                    name = p.name,
+                    sector = p.sector,
+                    stage_idx = p.stage_idx,
+                    valuation = offer_val,
+                    ask_amt = 0,
+                    ask_eq = 0,
+                    burn = p.burn,
+                    runway = p.runway,
+                    quality = p.quality,
+                    player_eq = p.player_eq,
+                    player_inv = p.player_inv,
+                    is_follow_on = false,
+                    is_ma_offer = true,
+                    target_idx = i -- remember which portfolio item this is for
+                }
+                table.insert(inbox, 1, offer)
+                show_msg("NEW M&A OFFER FOR " .. p.name .. "!", true)
             end
         end
     end
@@ -278,47 +292,97 @@ function _update()
         if #inbox > 0 and inbox[selected_idx] ~= nil then
             local p = inbox[selected_idx]
 
-            -- Z: INVEST
+            -- Z: INVEST / ACCEPT
             if just_pressed(4) then
-                if fund.cash >= p.ask_amt then
-                    fund.cash = fund.cash - p.ask_amt
-                    fund.deployed = fund.deployed + p.ask_amt
+                if p.is_ma_offer then
+                    -- Accept M&A buyout!
+                    local payout = p.valuation * p.player_eq
+                    local carry = process_payout(payout)
 
-                    p.player_eq = p.player_eq + p.ask_eq
-                    p.player_inv = p.player_inv + p.ask_amt
-                    p.is_follow_on = false
+                    local msg = "SOLD! " .. p.name .. " M&A PAYOUT: $" .. string.format("%.2f", payout) .. "M"
+                    if carry > 0 then msg = msg .. " (CARRY: $" .. string.format("%.2f", carry) .. "M)" end
 
-                    table.insert(portfolio, p)
+                    -- Remove the original company from the portfolio using target_idx
+                    table.remove(portfolio, p.target_idx)
+
+                    -- If we removed something before other offers, their target_idx might be wrong now.
+                    -- Simple fix: we just search for matching name to remove the real one to be safe
+                    for i=#portfolio, 1, -1 do
+                        if portfolio[i].name == p.name then table.remove(portfolio, i) end
+                    end
+
                     table.remove(inbox, selected_idx)
                     if selected_idx > #inbox then selected_idx = #inbox end
-                    show_msg("INVESTED $" .. string.format("%.2f", p.ask_amt) .. "M IN " .. p.name, true)
-                    advance_month() -- Time passes when you make a deal
+                    show_msg(msg, true)
+                    sfx(3)
+                    advance_month()
                 else
-                    show_msg("INSUFFICIENT FUNDS FOR THIS ROUND!", false)
+                    -- Normal Invest
+                    if fund.cash >= p.ask_amt then
+                        fund.cash = fund.cash - p.ask_amt
+                        fund.deployed = fund.deployed + p.ask_amt
+
+                        p.player_eq = p.player_eq + p.ask_eq
+                        p.player_inv = p.player_inv + p.ask_amt
+                        p.is_follow_on = false
+
+                        table.insert(portfolio, p)
+                        table.remove(inbox, selected_idx)
+                        if selected_idx > #inbox then selected_idx = #inbox end
+                        show_msg("INVESTED $" .. string.format("%.2f", p.ask_amt) .. "M IN " .. p.name, true)
+                        advance_month()
+                    else
+                        show_msg("INSUFFICIENT FUNDS FOR THIS ROUND!", false)
+                    end
                 end
             end
 
-            -- X: PASS
+            -- X: PASS / REJECT
             if just_pressed(5) then
-                if p.is_follow_on then
-                    -- We passed on our own portfolio company's round!
-                    -- Dilute our equity by the new investors (simplified math: equity * (1 - new_investor_equity))
-                    p.player_eq = p.player_eq * (1.0 - p.ask_eq)
-                    p.is_follow_on = false
-                    table.insert(portfolio, p)
-                    show_msg("PASSED ON " .. p.name .. " ROUND. EQUITY DILUTED.", false)
+                if p.is_ma_offer then
+                    show_msg("REJECTED M&A BUYOUT FOR " .. p.name, false)
+                    table.remove(inbox, selected_idx)
+                    if selected_idx > #inbox then selected_idx = #inbox end
+                    advance_month()
                 else
-                    show_msg("PASSED ON " .. p.name, false)
+                    if p.is_follow_on then
+                        -- Dilute our equity
+                        p.player_eq = p.player_eq * (1.0 - p.ask_eq)
+                        p.is_follow_on = false
+                        table.insert(portfolio, p)
+                        show_msg("PASSED ON " .. p.name .. " ROUND. EQUITY DILUTED.", false)
+                    else
+                        show_msg("PASSED ON " .. p.name, false)
+                    end
+                    table.remove(inbox, selected_idx)
+                    if selected_idx > #inbox then selected_idx = #inbox end
+                    advance_month()
                 end
-                table.remove(inbox, selected_idx)
-                if selected_idx > #inbox then selected_idx = #inbox end
-                advance_month() -- Time passes when you pass on a deal
             end
         else
             -- Inbox is empty. Allow player to advance time manually.
             if just_pressed(5) then -- X button
                 show_msg("ADVANCING 1 MONTH...", true)
                 advance_month()
+            end
+        end
+    elseif view_mode == "PORTFOLIO" then
+        if #portfolio > 0 and portfolio[selected_idx] ~= nil then
+            local p = portfolio[selected_idx]
+
+            -- Z: REPLACE CEO
+            if p.runway <= 5 and fund.cash >= 0.1 then
+                if just_pressed(4) then
+                    fund.cash = fund.cash - 0.1
+                    p.quality = math.min(1.0, p.quality + 0.4)
+                    p.runway = p.runway + 6
+                    p.player_eq = p.player_eq * 0.90 -- 10% dilution to new CEO
+                    show_msg("FIRED CEO OF " .. p.name .. ". RUNWAY +6 MO. EQ DILUTED.", true)
+                end
+            elseif p.runway <= 5 and fund.cash < 0.1 then
+                if just_pressed(4) then
+                    show_msg("NEED $0.1M TO FIRE CEO!", false)
+                end
             end
         end
     end
@@ -423,12 +487,26 @@ function _draw()
     else
         if view_mode == "INBOX" then
             if #inbox > 0 then
-                print("Z: INVEST/FUND   X: PASS", 10, 220, C_HL)
+                local p = inbox[selected_idx]
+                if p and p.is_ma_offer then
+                    print("Z: ACCEPT BUYOUT   X: REJECT", 10, 220, C_HL)
+                else
+                    print("Z: INVEST/FUND   X: PASS", 10, 220, C_HL)
+                end
             else
                 print("X: ADVANCE 1 MONTH", 10, 220, C_HL)
             end
         else
-            print("ARROWS: NAVIGATE", 10, 220, C_TEXT)
+            if #portfolio > 0 then
+                local p = portfolio[selected_idx]
+                if p and p.runway <= 5 then
+                    print("Z: REPLACE CEO ($0.1M)", 10, 220, C_HL)
+                else
+                    print("ARROWS: NAVIGATE", 10, 220, C_TEXT)
+                end
+            else
+                print("ARROWS: NAVIGATE", 10, 220, C_TEXT)
+            end
         end
     end
 
