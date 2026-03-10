@@ -475,6 +475,22 @@ function _draw()
             elseif p.quality > 0.25 then rating = "AVERAGE" end
             print("RATING: " .. rating, 14, 104, C_HL)
 
+            -- Calculate the exact probability they secure next round / survive
+            local odds = 0.0
+            if p.quality > 0.4 then
+                odds = math.min(1.0, p.quality + 0.2)
+            end
+
+            local odds_str = string.format("%.0f%%", odds * 100)
+            local odds_col = C_TEXT
+            if odds == 0.0 then
+                odds_str = "0% (DOOMED)"
+                odds_col = C_DIM
+            elseif odds > 0.8 then
+                odds_col = C_HL
+            end
+            print("SURVIVAL ODDS: " .. odds_str, 130, 104, odds_col)
+
             draw_line(10, 116, 246, 116, C_DIM)
 
             print("VALUATION: $" .. string.format("%.2f", p.valuation) .. "M", 14, 124, C_TEXT)
