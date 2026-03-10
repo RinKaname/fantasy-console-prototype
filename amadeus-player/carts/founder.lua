@@ -19,19 +19,23 @@ game_state = "START" -- START, SETUP_SEC, SETUP_NICHE, PLAY, PITCH, GAMEOVER, WI
 
 -- Startup Metrics
 metrics = {
-    cash = 50000,
+    cash = 20000,  -- Reduced from $50k to $20k (tighter runway)
     mrr = 0,
     users = 0,
-    burn = 2000,
+    burn = 3000,   -- Increased base burn
     equity = 1.0,
     quality = 1.0,
     hype = 1.0,
     month = 1,
     ap = 3,
     max_ap = 3,
-    valuation = 100000,
+    valuation = 50000,  -- Lower starting valuation
     devs = 0,
-    sales = 0
+    sales = 0,
+    market_size = 100000,  -- Total addressable market
+    market_share = 0,
+    competitor_strength = 1.0,  -- AI competitors get stronger over time
+    pmf_score = 0.3  -- Product-market fit (starts low, needs work)
 }
 
 -- Startup Identity
@@ -47,11 +51,11 @@ startup = {
 
 -- Setup Data
 sectors = {
-    {name = "SAAS", u_mult = 0.8, r_mult = 1.5, b_mult = 1.0},
-    {name = "AI", u_mult = 1.2, r_mult = 0.8, b_mult = 1.5},  -- Buffed from 0.5 to 0.8
-    {name = "SOCIAL", u_mult = 2.0, r_mult = 0.2, b_mult = 1.2},
-    {name = "CRYPTO", u_mult = 1.5, r_mult = 0.8, b_mult = 1.5},
-    {name = "HARDWARE", u_mult = 0.5, r_mult = 2.0, b_mult = 1.8}  -- Nerfed from 2.5 to 1.8
+    {name = "SAAS", u_mult = 0.7, r_mult = 1.3, b_mult = 1.1},      -- Nerfed slightly
+    {name = "AI", u_mult = 1.0, r_mult = 0.7, b_mult = 1.6},        -- More competitive pressure
+    {name = "SOCIAL", u_mult = 1.5, r_mult = 0.15, b_mult = 1.4},   -- Harder to monetize
+    {name = "CRYPTO", u_mult = 1.2, r_mult = 0.6, b_mult = 1.7},    -- Volatile and risky
+    {name = "HARDWARE", u_mult = 0.4, r_mult = 1.8, b_mult = 2.0}   -- Capital intensive
 }
 
 niches = {
@@ -114,6 +118,13 @@ function advance_month()
     metrics.max_ap = 3 + math.floor(metrics.devs / 2)
     metrics.ap = metrics.max_ap -- Reset to full AP at month start
     
+    -- Competitors get stronger over time (especially in AI/Crypto)
+    if startup.sector == "AI" or startup.sector == "CRYPTO" then
+        metrics.competitor_strength = metrics.competitor_strength + 0.05
+    else
+        metrics.competitor_strength = metrics.competitor_strength + 0.02
+    end
+    
     -- Server Costs (AWS Bill scales with users: approx $500 per 10k users)
     local server_cost = math.floor((metrics.users / 10000) * 500)
     local total_burn = metrics.burn + server_cost
@@ -122,20 +133,29 @@ function advance_month()
     metrics.cash = metrics.cash + metrics.mrr - total_burn
 
     -- Churn & Organic Growth
-    -- Churn increases if quality doesn't keep up with massive scale
+    -- Churn increases if quality doesn't keep up with massive scale OR if competitors are strong
     local scale_penalty = metrics.users / 5000000 -- 1% extra churn per 5M users
-    local churn_rate = (0.10 + scale_penalty) / metrics.quality
-    if churn_rate > 0.5 then churn_rate = 0.5 end -- Cap max churn at 50% a month
+    local competitor_penalty = (metrics.competitor_strength - 1.0) * 0.1 -- Stronger competitors = more churn
+    local pmf_bonus = metrics.pmf_score * 0.05 -- Better PMF = less churn
+    local churn_rate = (0.12 + scale_penalty + competitor_penalty - pmf_bonus) / metrics.quality
+    if churn_rate > 0.6 then churn_rate = 0.6 end -- Cap max churn at 60% a month
 
     local churn = metrics.users * churn_rate
-    local viral = metrics.users * (0.05 * metrics.hype * startup.user_mult)
+    -- Viral growth is reduced by competitor strength
+    local viral = metrics.users * (0.04 * metrics.hype * startup.user_mult / metrics.competitor_strength)
 
     metrics.users = math.floor(metrics.users - churn + viral)
     if metrics.users < 0 then metrics.users = 0 end
-
-    -- Hype decays over time
+    
+    -- Update market share
+    if metrics.market_size > 0 then
+        metrics.market_share = metrics.users / metrics.market_size
+    end
+    
+    -- Hype decays faster if PMF is low
+    local hype_decay = metrics.pmf_score < 0.5 and 0.15 or 0.1
     if metrics.hype > 1.0 then
-        metrics.hype = metrics.hype - 0.1
+        metrics.hype = metrics.hype - hype_decay
     end
 
     calc_valuation()
@@ -181,10 +201,14 @@ end
 
 function start_game()
     metrics = {
-        cash = 50000, mrr = 0, users = 0, burn = 2000,
+        cash = 20000, mrr = 0, users = 0, burn = 3000,
         equity = 1.0, quality = 1.0, hype = 1.0,
-        month = 1, ap = 3, max_ap = 3, valuation = 100000,
-        devs = 0, sales = 0
+        month = 1, ap = 3, max_ap = 3, valuation = 50000,
+        devs = 0, sales = 0,
+        market_size = 100000,
+        market_share = 0,
+        competitor_strength = 1.0,
+        pmf_score = 0.3
     }
     startup.user_mult = 1.0  -- Reset multipliers
     startup.rev_mult = 1.0
@@ -195,10 +219,11 @@ function start_game()
 end
 
 actions = {
-    {name = "BUILD MVP", ap = 1, desc = "+ QUALITY | + HYPE"},
+    {name = "BUILD MVP", ap = 1, desc = "+ QUALITY | + PMF | + HYPE"},
     {name = "MARKETING", ap = 1, desc = "COST SCALES | + USERS"},
     {name = "SALES PUSH", ap = 1, desc = "CONVERT USERS -> MRR"},
     {name = "HIRE DEV", ap = 2, desc = "+$5K BURN | + AP CAPACITY"},
+    {name = "CUSTOMER DEV", ap = 1, desc = "++ PMF SCORE (INTERVIEWS)"},
     {name = "PITCH VC", ap = 3, desc = "SEEK SEED / SERIES FUNDING"}
 }
 
@@ -255,6 +280,7 @@ function _update()
 
                 if menu_idx == 1 then -- BUILD
                     metrics.quality = metrics.quality + 0.2
+                    metrics.pmf_score = math.min(1.0, metrics.pmf_score + 0.05) -- Small PMF gain
                     metrics.hype = metrics.hype + 0.1
                     if metrics.users == 0 then metrics.users = 10 end -- First users
                     show_msg("SHIPPED NEW FEATURE!", true)
@@ -274,10 +300,12 @@ function _update()
                     end
                 elseif menu_idx == 3 then -- SALES
                     if metrics.users > 100 then
-                        -- Convert a % of users to MRR (buffed from 5% to 12%)
-                        local converted = metrics.users * 0.12 * startup.rev_mult
-                        -- Improved ARPU: $15-35 range (was $5-15)
-                        local new_mrr = math.floor(converted * (15.0 + random_float() * 20.0))
+                        -- Conversion rate now depends on PMF score (higher PMF = better conversion)
+                        local base_conversion = 0.08 + (metrics.pmf_score * 0.08) -- 8%-16% based on PMF
+                        local converted = metrics.users * base_conversion * startup.rev_mult
+                        -- ARPU also benefits from PMF: $10-30 range scaled by PMF
+                        local arpu_base = 10.0 + (metrics.pmf_score * 15.0)
+                        local new_mrr = math.floor(converted * (arpu_base + random_float() * 15.0))
                         metrics.mrr = metrics.mrr + new_mrr
                         show_msg("SALES CLOSED: +$" .. tostring(new_mrr) .. " MRR", true)
                     else
@@ -288,7 +316,13 @@ function _update()
                     metrics.burn = metrics.burn + 5000
                     metrics.devs = metrics.devs + 1
                     show_msg("HIRED DEVELOPER! BURN +$5K", true)
-                elseif menu_idx == 5 then -- PITCH
+                elseif menu_idx == 5 then -- CUSTOMER DEV
+                    -- Customer development significantly improves PMF
+                    local pmf_gain = 0.1 + (random_float() * 0.1)
+                    metrics.pmf_score = math.min(1.0, metrics.pmf_score + pmf_gain)
+                    metrics.hype = metrics.hype + 0.05
+                    show_msg("CUSTOMER INTERVIEWS: PMF +" .. string.format("%.0f", pmf_gain*100) .. "%", true)
+                elseif menu_idx == 6 then -- PITCH
                     generate_pitch()
                     game_state = "PITCH"
                     sfx(3)
@@ -429,14 +463,22 @@ function _draw()
 
     print("VALUATION: " .. format_money(metrics.valuation), 4, 42, C_HL)
     print("EQUITY: " .. string.format("%.1f%%", metrics.equity * 100), 4, 52, C_TEXT)
-
-    local runway = metrics.cash / metrics.burn
-    local run_col = runway < 3 and C_WARN or C_GOOD
+    
+    -- Calculate runway including MRR
+    local net_burn = metrics.burn - metrics.mrr
+    local runway = net_burn > 0 and (metrics.cash / net_burn) or 99.9
+    if runway > 99 then runway = 99.9 end
+    local run_col = runway < 3 and C_WARN or (runway < 6 and C_TEXT or C_GOOD)
     print("RUNWAY: " .. string.format("%.1f", runway) .. " MO", 150, 42, run_col)
 
     -- MIDDLE: Action Menu
     print("ACTION POINTS: " .. tostring(metrics.ap) .. " / " .. tostring(metrics.max_ap), 4, 70, C_HL)
     draw_progress(4, 80, 100, metrics.ap, metrics.max_ap, C_ACCENT)
+    
+    -- Show PMF score and competitor strength
+    local pmf_col = metrics.pmf_score < 0.5 and C_WARN or (metrics.pmf_score < 0.8 and C_TEXT or C_GOOD)
+    print("PMF: " .. string.format("%.0f%%", metrics.pmf_score * 100), 150, 70, pmf_col)
+    print("COMP: " .. string.format("%.1fx", metrics.competitor_strength), 200, 70, C_WARN)
 
     if game_state == "PLAY" then
         draw_line(0, 92, SCREEN_W, 92, C_DIM)
