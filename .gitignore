@@ -1,1 +1,1 @@
-Nothing should be ignored based on the provided file changes. The only modified file is 'amadeus-player/carts/founder.lua', which is a source code file (.lua) and should not be added to .gitignore.
+Nothing should be ignored based on the provided file changes. The only modified file is a Lua source file (`amadeus-player/carts/founder.lua`), which should not be added to .gitignore.

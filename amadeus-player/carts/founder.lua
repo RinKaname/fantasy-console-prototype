@@ -245,14 +245,14 @@ end
 
 function start_game()
     metrics = {
-        cash = 15000, mrr = 0, users = 0, burn = 4000,
-        equity = 1.0, quality = 0.8, hype = 0.8,
-        month = 1, ap = 3, max_ap = 3, valuation = 30000,
+        cash = 50000, mrr = 0, users = 0, burn = 2000,
+        equity = 1.0, quality = 0.9, hype = 0.9,
+        month = 1, ap = 3, max_ap = 3, valuation = 50000,
         devs = 0, sales = 0,
         market_size = 100000,
         market_share = 0,
-        competitor_strength = 1.2,
-        pmf_score = 0.2,
+        competitor_strength = 1.0,
+        pmf_score = 0.5,
         pivot_count = 0,
         feature_debt = 0
     }
