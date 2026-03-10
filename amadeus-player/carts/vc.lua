@@ -9,14 +9,21 @@ C_TEXT = 2
 C_HL = 3
 
 -- Fund State
+-- Firm & Persistent State
+firm_state = {
+    wealth = 0.0,
+    fund_number = 1,
+    current_size = 10.0 -- Start with a 10M fund
+}
+
+-- Fund State (Resets every 10 years)
 fund = {
-    total = 10.0, -- In millions
-    cash = 10.0,  -- Cash on hand
+    total = 10.0,
+    cash = 10.0,
     deployed = 0.0,
     returned = 0.0,
     month = 1,
-    max_months = 120, -- 10 year fund
-    player_wealth = 0.0 -- The GP's personal wealth from fees and carry
+    max_months = 120
 }
 
 -- Game State
@@ -103,7 +110,7 @@ function process_payout(payout)
         carry = profit * 0.20 -- 20% Carried Interest
     end
 
-    fund.player_wealth = fund.player_wealth + carry
+    firm_state.wealth = firm_state.wealth + carry
     -- The fund keeps the rest of the cash
     fund.cash = fund.cash + (payout - carry)
 
@@ -117,7 +124,7 @@ function advance_month()
     local mgmt_fee = (fund.total * 0.02) / 12.0
     if fund.cash >= mgmt_fee then
         fund.cash = fund.cash - mgmt_fee
-        fund.player_wealth = fund.player_wealth + mgmt_fee
+        firm_state.wealth = firm_state.wealth + mgmt_fee
     end
 
     if fund.month > fund.max_months then
@@ -212,11 +219,11 @@ function advance_month()
     end
 end
 
-function _init()
-    fund.cash = fund.total
+function start_fund()
+    fund.total = firm_state.current_size
+    fund.cash = firm_state.current_size
     fund.deployed = 0.0
     fund.returned = 0.0
-    fund.player_wealth = 0.0
     fund.month = 1
     inbox = {}
     portfolio = {}
@@ -229,6 +236,13 @@ function _init()
     view_mode = "INBOX"
     selected_idx = 1
     sfx(3)
+end
+
+function _init()
+    firm_state.wealth = 0.0
+    firm_state.fund_number = 1
+    firm_state.current_size = 10.0
+    start_fund()
 end
 
 -- Debouncing
@@ -252,9 +266,26 @@ function _update()
 
     local action_pressed = btn(4) or btn(5) or btn(6) or btn(7)
 
-    if game_state == "START" or game_state == "GAMEOVER" then
+    if game_state == "START" then
+        if just_pressed(4) then _init() end
+        return
+    end
+
+    if game_state == "GAMEOVER" then
         if just_pressed(4) then
-            _init()
+            -- Calculate final TVPI to determine next fund size
+            local mult = (fund.returned + fund.portfolio_val(portfolio)) / fund.total
+
+            if mult >= 2.0 then
+                firm_state.current_size = firm_state.current_size * 3.0
+            elseif mult >= 1.0 then
+                firm_state.current_size = firm_state.current_size * 1.5
+            else
+                firm_state.current_size = math.max(5.0, firm_state.current_size * 0.5)
+            end
+
+            firm_state.fund_number = firm_state.fund_number + 1
+            start_fund()
         end
         return
     end
@@ -434,13 +465,15 @@ function _draw()
 
     -- HEADER: Fund Stats
     fill_rect(0, 0, SCREEN_W, 36, C_DIM)
-    print("AMADEUS VENTURES - FUND I", 4, 4, C_HL)
+
+    local fund_title = "AMADEUS VENTURES - FUND " .. tostring(firm_state.fund_number)
+    print(fund_title, 4, 4, C_HL)
     print("MONTH: " .. tostring(fund.month) .. "/" .. tostring(fund.max_months), 180, 4, C_TEXT)
 
     local mult = (fund.returned + fund.portfolio_val(portfolio)) / fund.total
     print("FUND CASH: $" .. string.format("%.2f", fund.cash) .. "M", 4, 16, C_HL)
     print("RETURNED:  $" .. string.format("%.2f", fund.returned) .. "M", 4, 26, C_TEXT)
-    print("WEALTH: $" .. string.format("%.2f", fund.player_wealth) .. "M", 150, 16, C_HL)
+    print("WEALTH: $" .. string.format("%.2f", firm_state.wealth) .. "M", 150, 16, C_HL)
     print("TVPI: " .. string.format("%.2f", mult) .. "x", 150, 26, C_TEXT)
 
     draw_line(0, 37, SCREEN_W, 37, C_TEXT)
@@ -594,14 +627,14 @@ function _draw()
         fill_rect(50, 90, 156, 40, C_DIM)
         fill_rect(52, 92, 152, 36, C_BG)
         print("AMADEUS VENTURES", 70, 100, C_HL)
-        print("PRESS Z TO RAISE FUND I", 56, 112, C_TEXT)
+        print("PRESS Z TO RAISE FUND 1", 56, 112, C_TEXT)
     elseif game_state == "GAMEOVER" then
         fill_rect(40, 85, 176, 60, C_HL)
         fill_rect(42, 87, 172, 56, C_BG)
         print("FUND LIFECYCLE COMPLETE", 50, 95, C_HL)
         print("FINAL MULTIPLE: " .. string.format("%.2f", mult) .. "x", 50, 107, C_TEXT)
-        print("YOUR WEALTH: $" .. string.format("%.2f", fund.player_wealth) .. "M", 50, 117, C_HL)
-        print("PRESS Z TO START FUND II", 55, 130, C_DIM)
+        print("YOUR WEALTH: $" .. string.format("%.2f", firm_state.wealth) .. "M", 50, 117, C_HL)
+        print("PRESS Z TO START NEXT FUND", 45, 130, C_DIM)
     end
 end
 
