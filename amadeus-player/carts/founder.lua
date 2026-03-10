@@ -103,13 +103,31 @@ function format_num(val)
 end
 
 function calc_valuation()
-    -- Very rough VC logic: Revenue Multiple + User Value + Hype
-    -- Valuations get harder to inflate at massive scale without real revenue
-    local rev_val = (metrics.mrr * 12) * 10
-    local user_val = metrics.users * 1.5 * startup.user_mult -- Greatly reduced per-user value
+    -- Brutally realistic VC logic: Revenue is KING, users mean nothing without monetization
+    -- Late stage investors punish vanity metrics hard
+    local rev_val = (metrics.mrr * 12) * 8  -- Reduced multiple from 10x to 8x
+    
+    -- User value gets MASSIVE penalty at scale without revenue
+    local user_val = 0
+    if metrics.mrr > 0 then
+        local arpu = metrics.mrr / math.max(1, metrics.users)
+        if arpu < 1 then
+            user_val = metrics.users * 0.1  -- Penny ARPU = worthless users
+        elseif arpu < 5 then
+            user_val = metrics.users * 0.5  -- Still bad
+        else
+            user_val = metrics.users * 2.0 * startup.user_mult  -- Decent ARPU
+        end
+    else
+        user_val = metrics.users * 0.05  -- No revenue = almost worthless
+    end
+    
     local base = rev_val + user_val
     if base < 50000 then base = 50000 end
-    metrics.valuation = base * math.min(3.0, (metrics.quality * metrics.hype))
+    
+    -- Hype multiplier capped lower, quality matters more
+    local hype_cap = metrics.pmf_score > 0.7 and 2.0 or 1.5
+    metrics.valuation = base * math.min(hype_cap, (metrics.quality * (0.5 + metrics.hype * 0.5)))
 end
 
 function advance_month()
@@ -118,27 +136,43 @@ function advance_month()
     metrics.max_ap = 3 + math.floor(metrics.devs / 2)
     metrics.ap = metrics.max_ap -- Reset to full AP at month start
     
-    -- Competitors get stronger over time (especially in AI/Crypto)
+    -- Competitors get stronger over time (especially in AI/Crypto) - ACCELERATED
     if startup.sector == "AI" or startup.sector == "CRYPTO" then
-        metrics.competitor_strength = metrics.competitor_strength + 0.05
+        metrics.competitor_strength = metrics.competitor_strength + 0.08  -- Increased from 0.05
     else
-        metrics.competitor_strength = metrics.competitor_strength + 0.02
+        metrics.competitor_strength = metrics.competitor_strength + 0.03  -- Increased from 0.02
+    end
+    
+    -- Market saturation: harder to grow as you capture more market share
+    local saturation_penalty = metrics.market_share * 0.5  -- 50% reduction at 100% share
+    if viral > 0 then
+        viral = viral * (1.0 - saturation_penalty)
     end
     
     -- Server Costs (AWS Bill scales with users: approx $500 per 10k users)
     local server_cost = math.floor((metrics.users / 10000) * 500)
     local total_burn = metrics.burn + server_cost
 
-    -- Burn Cash
-    metrics.cash = metrics.cash + metrics.mrr - total_burn
+    -- Burn Cash (with penalty if burning too fast)
+    local burn_penalty = 1.0
+    if total_burn > metrics.mrr * 3 then
+        burn_penalty = 1.2  -- 20% extra cash burn when inefficient
+        show_msg(\"BURN RATE TOO HIGH! -20% EFFICIENCY\", false)
+    end
+    metrics.cash = metrics.cash + metrics.mrr - (total_burn * burn_penalty)
 
     -- Churn & Organic Growth
-    -- Churn increases if quality doesn't keep up with massive scale OR if competitors are strong
-    local scale_penalty = metrics.users / 5000000 -- 1% extra churn per 5M users
-    local competitor_penalty = (metrics.competitor_strength - 1.0) * 0.1 -- Stronger competitors = more churn
-    local pmf_bonus = metrics.pmf_score * 0.05 -- Better PMF = less churn
-    local churn_rate = (0.12 + scale_penalty + competitor_penalty - pmf_bonus) / metrics.quality
-    if churn_rate > 0.6 then churn_rate = 0.6 end -- Cap max churn at 60% a month
+    -- Churn increases MASSIVELY if quality doesn't keep up with scale OR if competitors are strong
+    local scale_penalty = metrics.users / 2000000 -- 1% extra churn per 2M users (was 5M)
+    local competitor_penalty = (metrics.competitor_strength - 1.0) * 0.15 -- Stronger competitors = more churn (increased from 0.1)
+    local pmf_bonus = metrics.pmf_score * 0.08 -- Better PMF = less churn (slightly increased)
+    local quality_requirement = math.log10(metrics.users + 1) * 0.3 -- Quality needs to scale with log(users)
+    local quality_gap = quality_requirement - metrics.quality
+    if quality_gap > 0 then
+        scale_penalty = scale_penalty + quality_gap * 0.1
+    end
+    local churn_rate = (0.15 + scale_penalty + competitor_penalty - pmf_bonus) / metrics.quality
+    if churn_rate > 0.7 then churn_rate = 0.7 end -- Cap max churn at 70% a month
 
     local churn = metrics.users * churn_rate
     -- Viral growth is reduced by competitor strength
@@ -285,13 +319,13 @@ function _update()
                     if metrics.users == 0 then metrics.users = 10 end -- First users
                     show_msg("SHIPPED NEW FEATURE!", true)
                 elseif menu_idx == 2 then -- MARKETING
-                    -- Marketing costs scale up as you get bigger
-                    local ad_cost = 2000 + math.floor(metrics.users * 0.05)
+                    -- Marketing costs scale up MUCH faster as you get bigger
+                    local ad_cost = 3000 + math.floor(metrics.users * 0.1)  -- Increased base and scaling
                     if metrics.cash >= ad_cost then
                         metrics.cash = metrics.cash - ad_cost
-                        -- Gain scales with existing userbase but has diminishing returns
-                        local gain_base = 500 + (metrics.users * 0.10)
-                        local gained = math.floor((gain_base + random_float() * gain_base) * startup.user_mult * metrics.hype)
+                        -- Gain scales with existing userbase but has STRONG diminishing returns
+                        local gain_base = 300 + (metrics.users * 0.05)  -- Reduced gains
+                        local gained = math.floor((gain_base + random_float() * gain_base) * startup.user_mult * metrics.hype / (1 + metrics.users/1000000))
                         metrics.users = metrics.users + gained
                         show_msg("ADS ($" .. format_num(ad_cost) .. "): +" .. format_num(gained) .. " USERS", true)
                     else
@@ -301,11 +335,11 @@ function _update()
                 elseif menu_idx == 3 then -- SALES
                     if metrics.users > 100 then
                         -- Conversion rate now depends on PMF score (higher PMF = better conversion)
-                        local base_conversion = 0.08 + (metrics.pmf_score * 0.08) -- 8%-16% based on PMF
+                        local base_conversion = 0.05 + (metrics.pmf_score * 0.07) -- 5%-12% based on PMF (reduced from 8%-16%)
                         local converted = metrics.users * base_conversion * startup.rev_mult
-                        -- ARPU also benefits from PMF: $10-30 range scaled by PMF
-                        local arpu_base = 10.0 + (metrics.pmf_score * 15.0)
-                        local new_mrr = math.floor(converted * (arpu_base + random_float() * 15.0))
+                        -- ARPU also benefits from PMF: $8-25 range scaled by PMF (reduced from $10-30)
+                        local arpu_base = 8.0 + (metrics.pmf_score * 12.0)
+                        local new_mrr = math.floor(converted * (arpu_base + random_float() * 10.0))
                         metrics.mrr = metrics.mrr + new_mrr
                         show_msg("SALES CLOSED: +$" .. tostring(new_mrr) .. " MRR", true)
                     else
