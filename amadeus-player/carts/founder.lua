@@ -100,11 +100,12 @@ end
 
 function calc_valuation()
     -- Very rough VC logic: Revenue Multiple + User Value + Hype
+    -- Valuations get harder to inflate at massive scale without real revenue
     local rev_val = (metrics.mrr * 12) * 10
-    local user_val = metrics.users * 5 * startup.user_mult
+    local user_val = metrics.users * 1.5 * startup.user_mult -- Greatly reduced per-user value
     local base = rev_val + user_val
     if base < 50000 then base = 50000 end
-    metrics.valuation = base * metrics.quality * metrics.hype
+    metrics.valuation = base * math.min(3.0, (metrics.quality * metrics.hype))
 end
 
 function advance_month()
@@ -112,12 +113,22 @@ function advance_month()
     metrics.ap = metrics.max_ap + math.floor(metrics.devs / 2) -- Devs give extra AP/automation
     if metrics.ap > 6 then metrics.ap = 6 end
 
+    -- Server Costs (AWS Bill scales with users: approx $500 per 10k users)
+    local server_cost = math.floor((metrics.users / 10000) * 500)
+    local total_burn = metrics.burn + server_cost
+
     -- Burn Cash
-    metrics.cash = metrics.cash + metrics.mrr - metrics.burn
+    metrics.cash = metrics.cash + metrics.mrr - total_burn
 
     -- Churn & Organic Growth
-    local churn = metrics.users * (0.15 / metrics.quality)
+    -- Churn increases if quality doesn't keep up with massive scale
+    local scale_penalty = metrics.users / 5000000 -- 1% extra churn per 5M users
+    local churn_rate = (0.10 + scale_penalty) / metrics.quality
+    if churn_rate > 0.5 then churn_rate = 0.5 end -- Cap max churn at 50% a month
+
+    local churn = metrics.users * churn_rate
     local viral = metrics.users * (0.05 * metrics.hype * startup.user_mult)
+
     metrics.users = math.floor(metrics.users - churn + viral)
     if metrics.users < 0 then metrics.users = 0 end
 
@@ -181,7 +192,7 @@ end
 
 actions = {
     {name = "BUILD MVP", ap = 1, desc = "+ QUALITY | + HYPE"},
-    {name = "MARKETING", ap = 1, desc = "COST: $2K | + USERS"},
+    {name = "MARKETING", ap = 1, desc = "COST SCALES | + USERS"},
     {name = "SALES PUSH", ap = 1, desc = "CONVERT USERS -> MRR"},
     {name = "HIRE DEV", ap = 2, desc = "+$5K BURN | + AP CAPACITY"},
     {name = "PITCH VC", ap = 3, desc = "SEEK SEED / SERIES FUNDING"}
@@ -244,13 +255,17 @@ function _update()
                     if metrics.users == 0 then metrics.users = 10 end -- First users
                     show_msg("SHIPPED NEW FEATURE!", true)
                 elseif menu_idx == 2 then -- MARKETING
-                    if metrics.cash >= 2000 then
-                        metrics.cash = metrics.cash - 2000
-                        local gained = math.floor((500 + random_float() * 1000) * startup.user_mult * metrics.hype)
+                    -- Marketing costs scale up as you get bigger
+                    local ad_cost = 2000 + math.floor(metrics.users * 0.05)
+                    if metrics.cash >= ad_cost then
+                        metrics.cash = metrics.cash - ad_cost
+                        -- Gain scales with existing userbase but has diminishing returns
+                        local gain_base = 500 + (metrics.users * 0.10)
+                        local gained = math.floor((gain_base + random_float() * gain_base) * startup.user_mult * metrics.hype)
                         metrics.users = metrics.users + gained
-                        show_msg("CAMPAIGN SUCCESS: +" .. tostring(gained) .. " USERS", true)
+                        show_msg("ADS ($" .. format_num(ad_cost) .. "): +" .. format_num(gained) .. " USERS", true)
                     else
-                        show_msg("NOT ENOUGH CASH FOR ADS!", false)
+                        show_msg("NEED " .. format_money(ad_cost) .. " FOR ADS!", false)
                         metrics.ap = metrics.ap + act.ap -- refund AP
                     end
                 elseif menu_idx == 3 then -- SALES
@@ -423,8 +438,16 @@ function _draw()
             local y = 100 + ((i-1) * 20)
 
             if i == menu_idx then print(">", 4, y, C_HL) end
+
+            local desc = act.desc
+            -- Dynamically update the Marketing cost text based on current scaling
+            if i == 2 then
+                local ad_cost = 2000 + math.floor(metrics.users * 0.05)
+                desc = "COST: " .. format_money(ad_cost) .. " | + USERS"
+            end
+
             print(act.name .. " [" .. tostring(act.ap) .. " AP]", 14, y, col)
-            print(act.desc, 14, y + 8, C_DIM)
+            print(desc, 14, y + 8, C_DIM)
         end
 
         draw_line(0, 205, SCREEN_W, 205, C_DIM)
