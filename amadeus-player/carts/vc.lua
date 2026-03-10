@@ -33,6 +33,7 @@ view_mode = "INBOX" -- or "PORTFOLIO"
 selected_idx = 1
 msg_timer = 0
 msg_text = ""
+show_details = false
 
 -- Startup Data Generators
 names_first = {"Aero", "Cloud", "Cyber", "Data", "Deep", "Neuro", "Nova", "Omni", "Quantum", "Syn", "Tech", "Zen"}
@@ -262,10 +263,18 @@ function _update()
     if just_pressed(0) then
         view_mode = "INBOX"
         selected_idx = 1
+        show_details = false
         sfx(2)
     elseif just_pressed(1) then
         view_mode = "PORTFOLIO"
         selected_idx = 1
+        show_details = false
+        sfx(2)
+    end
+
+    -- Toggle Details View
+    if just_pressed(6) then
+        show_details = not show_details
         sfx(2)
     end
 
@@ -280,10 +289,12 @@ function _update()
     if just_pressed(2) then
         selected_idx = selected_idx - 1
         if selected_idx < 1 then selected_idx = max_idx end
+        show_details = false
         sfx(2)
     elseif just_pressed(3) then
         selected_idx = selected_idx + 1
         if selected_idx > max_idx then selected_idx = 1 end
+        show_details = false
         sfx(2)
     end
 
@@ -441,11 +452,51 @@ function _draw()
     print("< PORTFOLIO ("..#portfolio..") >", 120, 44, pf_col)
     draw_line(0, 54, SCREEN_W, 54, C_DIM)
 
-    -- LIST VIEW
+    -- LIST VIEW OR DETAILS VIEW
     local current_list = (view_mode == "INBOX") and inbox or portfolio
 
     if #current_list == 0 then
         print("EMPTY", 110, 100, C_DIM)
+    elseif show_details then
+        -- DUE DILIGENCE / DETAILS VIEW
+        local p = current_list[selected_idx]
+        if p then
+            fill_rect(8, 60, 240, 140, C_DIM)
+            fill_rect(10, 62, 236, 136, C_BG)
+            print("DUE DILIGENCE: " .. p.name, 14, 66, C_HL)
+            draw_line(10, 76, 246, 76, C_DIM)
+
+            print("SECTOR: " .. p.sector, 14, 84, C_TEXT)
+            print("STAGE:  " .. stages[p.stage_idx], 14, 94, C_TEXT)
+
+            local rating = "HIGH RISK"
+            if p.quality > 0.8 then rating = "EXCELLENT"
+            elseif p.quality > 0.5 then rating = "GOOD"
+            elseif p.quality > 0.25 then rating = "AVERAGE" end
+            print("RATING: " .. rating, 14, 104, C_HL)
+
+            draw_line(10, 116, 246, 116, C_DIM)
+
+            print("VALUATION: $" .. string.format("%.2f", p.valuation) .. "M", 14, 124, C_TEXT)
+            print("BURN RATE: $" .. string.format("%.2f", p.burn) .. "M/MO", 14, 134, C_TEXT)
+            print("RUNWAY:    " .. math.floor(p.runway) .. " MO", 14, 144, C_TEXT)
+
+            draw_line(10, 156, 246, 156, C_DIM)
+
+            if view_mode == "INBOX" then
+                if p.is_ma_offer then
+                    print("BUYOUT OFFER: $" .. string.format("%.2f", p.valuation) .. "M", 14, 164, C_HL)
+                    print("YOUR PAYOUT:  $" .. string.format("%.2f", p.valuation * p.player_eq) .. "M", 14, 174, C_HL)
+                else
+                    print("ASK AMOUNT:   $" .. string.format("%.2f", p.ask_amt) .. "M", 14, 164, C_HL)
+                    print("FOR EQUITY:   " .. string.format("%.1f%%", p.ask_eq * 100), 14, 174, C_HL)
+                end
+            else
+                print("YOUR INVEST:  $" .. string.format("%.2f", p.player_inv) .. "M", 14, 164, C_HL)
+                print("YOUR EQUITY:  " .. string.format("%.1f%%", p.player_eq * 100), 14, 174, C_HL)
+                print("CURRENT VAL:  $" .. string.format("%.2f", p.valuation * p.player_eq) .. "M", 14, 184, C_HL)
+            end
+        end
     else
         -- Draw List items
         local start_idx = math.max(1, selected_idx - 2)
@@ -465,12 +516,19 @@ function _draw()
             local title = p.name .. " [" .. p.sector .. "] " .. stages[p.stage_idx]
             if p.is_follow_on and view_mode == "INBOX" then
                 title = "*PORTFOLIO* " .. title
+            elseif p.is_ma_offer and view_mode == "INBOX" then
+                title = "*M&A OFFER* " .. title
             end
             print(title, 12, y, col)
 
             if view_mode == "INBOX" then
-                local details = "VAL: $"..string.format("%.1f", p.valuation).."M | ASK: $"..string.format("%.2f", p.ask_amt).."M FOR "..string.format("%.1f", p.ask_eq * 100).."%"
-                print(details, 12, y + 10, col)
+                if p.is_ma_offer then
+                    local details = "BUYOUT VAL: $"..string.format("%.1f", p.valuation).."M | PAYOUT: $"..string.format("%.2f", p.valuation * p.player_eq).."M"
+                    print(details, 12, y + 10, col)
+                else
+                    local details = "VAL: $"..string.format("%.1f", p.valuation).."M | ASK: $"..string.format("%.2f", p.ask_amt).."M FOR "..string.format("%.1f", p.ask_eq * 100).."%"
+                    print(details, 12, y + 10, col)
+                end
             else
                 local details = "OWN: "..string.format("%.1f", p.player_eq * 100).."% | RUNWAY: "..math.floor(p.runway).." MO"
                 print(details, 12, y + 10, col)
@@ -485,27 +543,32 @@ function _draw()
         fill_rect(0, 211, SCREEN_W, 29, C_BG)
         print(msg_text, 4, 220, C_HL)
     else
-        if view_mode == "INBOX" then
-            if #inbox > 0 then
-                local p = inbox[selected_idx]
-                if p and p.is_ma_offer then
-                    print("Z: ACCEPT BUYOUT   X: REJECT", 10, 220, C_HL)
+        if show_details then
+            print("ENTER: CLOSE DETAILS", 10, 220, C_TEXT)
+        else
+            if view_mode == "INBOX" then
+                if #inbox > 0 then
+                    local p = inbox[selected_idx]
+                    if p and p.is_ma_offer then
+                        print("Z: ACCEPT BUYOUT   X: REJECT", 10, 220, C_HL)
+                    else
+                        print("ENTER: DUE DILIGENCE", 140, 220, C_DIM)
+                        print("Z: INVEST/FUND X: PASS", 10, 220, C_HL)
+                    end
                 else
-                    print("Z: INVEST/FUND   X: PASS", 10, 220, C_HL)
+                    print("X: ADVANCE 1 MONTH", 10, 220, C_HL)
                 end
             else
-                print("X: ADVANCE 1 MONTH", 10, 220, C_HL)
-            end
-        else
-            if #portfolio > 0 then
-                local p = portfolio[selected_idx]
-                if p and p.runway <= 5 then
-                    print("Z: REPLACE CEO ($0.1M)", 10, 220, C_HL)
+                if #portfolio > 0 then
+                    local p = portfolio[selected_idx]
+                    if p and p.runway <= 5 then
+                        print("Z: REPLACE CEO ($0.1M)", 10, 220, C_HL)
+                    else
+                        print("ENTER: DUE DILIGENCE", 10, 220, C_TEXT)
+                    end
                 else
                     print("ARROWS: NAVIGATE", 10, 220, C_TEXT)
                 end
-            else
-                print("ARROWS: NAVIGATE", 10, 220, C_TEXT)
             end
         end
     end
