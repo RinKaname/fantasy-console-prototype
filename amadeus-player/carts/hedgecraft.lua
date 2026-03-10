@@ -34,6 +34,15 @@ last_return_pct = 0.0
 msg_text = ""
 msg_timer = 0
 
+-- Annual Report Data
+report_data = {
+    year = 1,
+    return_pct = 0,
+    mgmt_fee = 0,
+    perf_fee = 0,
+    redemptions = 0
+}
+
 -- Market Regimes
 regimes = {
     { name = "BULL MARKET", mom = 1.1, vol = 0.7, liq = 1.2, fund = 1.3 },
@@ -265,17 +274,16 @@ function advance_month()
             total_aum = total_aum - redemptions
         end
 
-        if redemptions > 0 then
-            show_msg("FEES: " .. format_money(total_fees) .. " | REDEMPTIONS: " .. format_money(redemptions), false)
-        else
-            show_msg("YEAR END. FEES EARNED: " .. format_money(total_fees), true)
-        end
+        -- Populate Report Data
+        report_data.year = year
+        report_data.return_pct = annual_return_raw * 100.0
+        report_data.mgmt_fee = mgmt_fee
+        report_data.perf_fee = perf_fee
+        report_data.redemptions = redemptions
 
-        -- Reset for next year
-        year_start_aum = total_aum
-        month = 1
-        year = year + 1
-        roll_regime()
+        -- Switch to Annual Report state instead of instantly rolling over
+        game_state = "ANNUAL_REPORT"
+        sfx(3)
     else
         month = month + 1
         if gross_return > 0 then sfx(2) else sfx(1) end
@@ -300,6 +308,18 @@ function _update()
 
     if game_state == "GAMEOVER_CASH" or game_state == "GAMEOVER_SEC" or game_state == "GAMEOVER_MARGIN" or game_state == "GAMEOVER_REVOLT" then
         if just_pressed(4) then _init() end
+        return
+    end
+
+    if game_state == "ANNUAL_REPORT" then
+        if just_pressed(4) then -- Z to acknowledge
+            year_start_aum = total_aum
+            month = 1
+            year = year + 1
+            roll_regime()
+            game_state = "PLAY"
+            sfx(2)
+        end
         return
     end
 
@@ -527,7 +547,11 @@ function _draw()
 
                 print(r.name .. " x" .. tostring(count), 14, y, col)
                 print(r.desc, 14, y + 10, C_DIM)
-                print(format_money(r.cost), 200, y, col)
+
+                -- Right-align the cost
+                local cost_str = format_money(r.cost)
+                local cost_x = SCREEN_W - (string.len(cost_str) * 6) - 4
+                print(cost_str, cost_x, y, col)
             end
         end
 
@@ -565,5 +589,28 @@ function _draw()
         print("LIMITED PARTNER REVOLT", 50, 100, C_HL)
         print("EXCESSIVE FEES DESTROYED ALL VALUE", 25, 110, C_TEXT)
         print("PRESS Z TO RESTART", 60, 124, C_DIM)
+    elseif game_state == "ANNUAL_REPORT" then
+        fill_rect(10, 30, 236, 180, C_TEXT)
+        fill_rect(12, 32, 232, 176, C_BG)
+
+        print("ANNUAL FINANCIAL REPORT: YR " .. tostring(report_data.year), 20, 40, C_HL)
+        draw_line(12, 50, 244, 50, C_DIM)
+
+        print("END OF YEAR AUM:   " .. format_money(total_aum), 20, 60, C_TEXT)
+
+        local ret_col = report_data.return_pct >= 0 and C_HL or C_TEXT
+        print("GROSS RETURN:      " .. string.format("%.2f%%", report_data.return_pct), 20, 80, ret_col)
+        print("HURDLE RATE:       8.00%", 20, 90, C_DIM)
+
+        print("MANAGEMENT FEE:    " .. format_money(report_data.mgmt_fee), 20, 110, C_HL)
+        print("PERFORMANCE FEE:   " .. format_money(report_data.perf_fee), 20, 120, C_HL)
+
+        local red_col = report_data.redemptions > 0 and C_TEXT or C_DIM
+        print("LP REDEMPTIONS:    " .. format_money(report_data.redemptions), 20, 140, red_col)
+
+        draw_line(12, 160, 244, 160, C_DIM)
+        print("NEW GP CASH:       " .. format_money(gp_cash), 20, 170, C_HL)
+
+        print("PRESS Z TO SIGN OFF & BEGIN YR " .. tostring(report_data.year + 1), 30, 195, C_DIM)
     end
 end
