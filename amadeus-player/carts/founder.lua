@@ -48,10 +48,10 @@ startup = {
 -- Setup Data
 sectors = {
     {name = "SAAS", u_mult = 0.8, r_mult = 1.5, b_mult = 1.0},
-    {name = "AI", u_mult = 1.2, r_mult = 0.5, b_mult = 2.0},
+    {name = "AI", u_mult = 1.2, r_mult = 0.8, b_mult = 1.5},  -- Buffed from 0.5 to 0.8
     {name = "SOCIAL", u_mult = 2.0, r_mult = 0.2, b_mult = 1.2},
     {name = "CRYPTO", u_mult = 1.5, r_mult = 0.8, b_mult = 1.5},
-    {name = "HARDWARE", u_mult = 0.5, r_mult = 2.0, b_mult = 2.5}
+    {name = "HARDWARE", u_mult = 0.5, r_mult = 2.0, b_mult = 1.8}  -- Nerfed from 2.5 to 1.8
 }
 
 niches = {
@@ -110,9 +110,10 @@ end
 
 function advance_month()
     metrics.month = metrics.month + 1
-    metrics.ap = metrics.max_ap + math.floor(metrics.devs / 2) -- Devs give extra AP/automation
-    if metrics.ap > 6 then metrics.ap = 6 end
-
+    -- FIX: Devs increase max_ap capacity, not just current AP
+    metrics.max_ap = 3 + math.floor(metrics.devs / 2)
+    metrics.ap = metrics.max_ap -- Reset to full AP at month start
+    
     -- Server Costs (AWS Bill scales with users: approx $500 per 10k users)
     local server_cost = math.floor((metrics.users / 10000) * 500)
     local total_burn = metrics.burn + server_cost
@@ -185,6 +186,9 @@ function start_game()
         month = 1, ap = 3, max_ap = 3, valuation = 100000,
         devs = 0, sales = 0
     }
+    startup.user_mult = 1.0  -- Reset multipliers
+    startup.rev_mult = 1.0
+    startup.burn_mult = 1.0
     menu_idx = 1
     game_state = "SETUP_SEC"
     sfx(3)
@@ -270,9 +274,10 @@ function _update()
                     end
                 elseif menu_idx == 3 then -- SALES
                     if metrics.users > 100 then
-                        -- Convert a % of users to MRR
-                        local converted = metrics.users * 0.05 * startup.rev_mult
-                        local new_mrr = math.floor(converted * (5.0 + random_float() * 10.0))
+                        -- Convert a % of users to MRR (buffed from 5% to 12%)
+                        local converted = metrics.users * 0.12 * startup.rev_mult
+                        -- Improved ARPU: $15-35 range (was $5-15)
+                        local new_mrr = math.floor(converted * (15.0 + random_float() * 20.0))
                         metrics.mrr = metrics.mrr + new_mrr
                         show_msg("SALES CLOSED: +$" .. tostring(new_mrr) .. " MRR", true)
                     else
@@ -412,7 +417,10 @@ function _draw()
     print("MONTH: " .. tostring(metrics.month), 200, 4, C_TEXT)
 
     print("CASH: " .. format_money(metrics.cash), 4, 16, C_GOOD)
-    print("BURN: " .. format_money(metrics.burn) .. "/MO", 4, 26, C_WARN)
+    
+    -- Calculate server cost for display
+    local server_cost = math.floor((metrics.users / 10000) * 500)
+    print("BURN: " .. format_money(metrics.burn) .. "+" .. format_money(server_cost) .. "/MO", 4, 26, C_WARN)
 
     print("USERS: " .. format_num(metrics.users), 120, 16, C_ACCENT)
     print("MRR:   " .. format_money(metrics.mrr), 120, 26, C_GOOD)
