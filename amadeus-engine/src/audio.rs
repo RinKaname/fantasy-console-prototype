@@ -80,7 +80,7 @@ impl AudioSystem {
             10 => {
                 // Just a tiny melody placeholder
                 let s1 = SineWave::new(659.25).take_duration(Duration::from_millis(150)).amplify(0.2); // E5
-                let s_pause = SineWave::new(0.0).take_duration(Duration::from_millis(50)).amplify(0.0);
+                let s_pause = SineWave::new(1.0).take_duration(Duration::from_millis(50)).amplify(0.0);
                 let s2 = SineWave::new(880.00).take_duration(Duration::from_millis(150)).amplify(0.2); // A5
                 let s3 = SineWave::new(1046.50).take_duration(Duration::from_millis(300)).amplify(0.2); // C6
                 sink.append(s1);
