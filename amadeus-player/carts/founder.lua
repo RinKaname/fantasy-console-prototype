@@ -542,24 +542,29 @@ function _draw()
     print("PMF: " .. string.format("%.0f%%", metrics.pmf_score * 100), 150, 70, pmf_col)
     print("COMP: " .. string.format("%.1fx", metrics.competitor_strength), 200, 70, C_WARN)
 
+    -- Show PMF score and competitor strength
+    local pmf_col = metrics.pmf_score < 0.5 and C_WARN or (metrics.pmf_score < 0.8 and C_TEXT or C_GOOD)
+    print("PMF: " .. string.format("%.0f%%", metrics.pmf_score * 100), 150, 70, pmf_col)
+    print("COMP: " .. string.format("%.1fx", metrics.competitor_strength), 200, 70, C_WARN)
+
     if game_state == "PLAY" then
         draw_line(0, 92, SCREEN_W, 92, C_DIM)
         for i = 1, #actions do
             local act = actions[i]
             local col = (i == menu_idx) and C_HL or C_TEXT
-            local y = 100 + ((i-1) * 20)
+            local y = 96 + ((i-1) * 15)
 
             if i == menu_idx then print(">", 4, y, C_HL) end
 
             local desc = act.desc
             -- Dynamically update the Marketing cost text based on current scaling
             if i == 2 then
-                local ad_cost = 2000 + math.floor(metrics.users * 0.05)
+                local ad_cost = 4000 + math.floor(metrics.users * 0.15)
                 desc = "COST: " .. format_money(ad_cost) .. " | + USERS"
             end
 
             print(act.name .. " [" .. tostring(act.ap) .. " AP]", 14, y, col)
-            print(desc, 14, y + 8, C_DIM)
+            print(desc, 14, y + 7, C_DIM)
         end
 
         draw_line(0, 205, SCREEN_W, 205, C_DIM)
