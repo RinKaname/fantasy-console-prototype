@@ -124,7 +124,7 @@ end
 -- ==============================================================================
 
 local function generate_deal()
-    local t_idx = math.floor(math.random() * #deal_types) + 1
+    local t_idx = math.floor(random_float() * #deal_types) + 1
     local t = deal_types[t_idx]
 
     -- Modify chances based on market regime
@@ -134,7 +134,7 @@ local function generate_deal()
     end
 
     -- Brand and MDs affect the scale of the deal
-    local scale = 1.0 + (firm.brand / 20.0) + (firm.mds * 0.2) + (math.random() * 0.5)
+    local scale = 1.0 + (firm.brand / 20.0) + (firm.mds * 0.2) + (random_float() * 0.5)
 
     -- VPs improve success chance
     local base_chance = 70 * mod
@@ -159,10 +159,10 @@ local function refresh_deal_board()
 end
 
 local function generate_order()
-    local t_idx = math.floor(math.random() * #order_types) + 1
+    local t_idx = math.floor(random_float() * #order_types) + 1
     local t = order_types[t_idx]
 
-    local scale = 1.0 + (math.random() * 2.0)
+    local scale = 1.0 + (random_float() * 2.0)
 
     return {
         name = t.name,
@@ -186,10 +186,10 @@ local function update_market_regime()
     if regime_timer >= next_regime_shift then
         regime_timer = 0
         -- Randomize next shift duration (6 to 24 months)
-        next_regime_shift = math.floor(math.random() * 18) + 6
+        next_regime_shift = math.floor(random_float() * 18) + 6
 
         -- Transition logic (markov chain-ish)
-        local r = math.random()
+        local r = random_float()
         if market_regime == 0 then -- Bull
             if r < 0.6 then market_regime = 2 -- Stagnant
             elseif r < 0.8 then market_regime = 3 -- Volatile
@@ -221,13 +221,13 @@ local function end_month()
         d.progress = d.progress + 1
 
         -- Analysts reduce duration slightly (pseudo-speedup)
-        if math.random() < (firm.analysts * 0.05) then
+        if random_float() < (firm.analysts * 0.05) then
             d.progress = d.progress + 1
         end
 
         if d.progress >= d.dur then
             -- Deal completes, roll for success
-            if math.random() * 100 <= d.chance then
+            if random_float() * 100 <= d.chance then
                 -- Success
                 firm.cash = firm.cash + d.fee
                 firm.total_revenue = firm.total_revenue + d.fee
@@ -260,7 +260,7 @@ local function end_month()
             local trader_skill = math.min(0.5, firm.traders * 0.05)
 
             -- Calculate PnL from position
-            local pnl_pct = (math.random() * (o.vol * 2) - o.vol) * regime_vol_mult
+            local pnl_pct = (random_float() * (o.vol * 2) - o.vol) * regime_vol_mult
 
             -- Apply trader skill buffer if loss
             if pnl_pct < 0 then pnl_pct = pnl_pct * (1.0 - trader_skill) end
@@ -301,7 +301,7 @@ local function end_month()
         end
 
         -- Apply baseline growth + monthly variance
-        c.rev = c.rev * (1.0 + ((c.growth - 1.0) / 12) * mult + ((math.random() * 0.04) - 0.02))
+        c.rev = c.rev * (1.0 + ((c.growth - 1.0) / 12) * mult + ((random_float() * 0.04) - 0.02))
     end
 
     update_market_regime()
