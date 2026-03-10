@@ -137,8 +137,8 @@ end
 
 function advance_month()
     metrics.month = metrics.month + 1
-    -- HARDCORE: Devs increase max_ap capacity slower
-    metrics.max_ap = 2 + math.floor(metrics.devs / 3)  -- Was 3 + devs/2
+    -- Devs increase max_ap capacity (start with 3, +1 per 2 devs)
+    metrics.max_ap = 3 + math.floor(metrics.devs / 2)
     metrics.ap = metrics.max_ap -- Reset to full AP at month start
     
     -- HARDCORE: Competitors get MUCH stronger over time (especially in AI/Crypto)
