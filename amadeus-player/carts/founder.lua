@@ -166,7 +166,7 @@ function advance_month()
     local burn_penalty = 1.0
     if total_burn > metrics.mrr * 2 then  -- HARDCORE: Penalty kicks in at 2x MRR (was 3x)
         burn_penalty = 1.3  -- HARDCORE: 30% extra cash burn when inefficient (was 20%)
-        show_msg(\"BURN RATE TOO HIGH! -30% EFFICIENCY\", false)
+        show_msg("BURN RATE TOO HIGH! -30% EFFICIENCY", false)
     end
     metrics.cash = metrics.cash + metrics.mrr - (total_burn * burn_penalty)
 
