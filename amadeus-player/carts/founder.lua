@@ -19,25 +19,25 @@ game_state = "START" -- START, SETUP_SEC, SETUP_NICHE, PLAY, PITCH, GAMEOVER, WI
 
 -- Startup Metrics
 metrics = {
-    cash = 15000,  -- HARDCORE: Only $15k starting cash (5 months runway max)
+    cash = 50000,  -- Standard: $50k starting cash (reasonable runway)
     mrr = 0,
     users = 0,
-    burn = 4000,   -- HARDCORE: Higher base burn
+    burn = 2000,   -- Standard: Moderate base burn
     equity = 1.0,
-    quality = 0.8, -- HARDCORE: Start with worse code quality
-    hype = 0.8,    -- HARDCORE: Start with less hype
+    quality = 0.9, -- Standard: Decent starting code quality
+    hype = 0.9,    -- Standard: Reasonable starting hype
     month = 1,
     ap = 3,
     max_ap = 3,
-    valuation = 30000,  -- HARDCORE: Lower starting valuation
+    valuation = 50000,  -- Standard: Fair starting valuation
     devs = 0,
     sales = 0,
     market_size = 100000,
     market_share = 0,
-    competitor_strength = 1.2,  -- HARDCORE: Stronger initial competition
-    pmf_score = 0.2,  -- HARDCORE: Even lower starting PMF
+    competitor_strength = 0.8,  -- Standard: Moderate competition
+    pmf_score = 0.5,  -- Standard: Neutral starting PMF
     pivot_count = 0,  -- Track pivots for penalty
-    feature_debt = 0  -- HARDCORE: Technical debt mechanic
+    feature_debt = 0  -- Technical debt mechanic
 }
 
 -- Startup Identity
@@ -53,11 +53,11 @@ startup = {
 
 -- Setup Data
 sectors = {
-    {name = "SAAS", u_mult = 0.6, r_mult = 1.2, b_mult = 1.2},      -- HARDCORE: Nerfed harder
-    {name = "AI", u_mult = 0.9, r_mult = 0.6, b_mult = 1.8},        -- HARDCORE: Brutal competition
-    {name = "SOCIAL", u_mult = 1.3, r_mult = 0.12, b_mult = 1.6},   -- HARDCORE: Nearly impossible to monetize
-    {name = "CRYPTO", u_mult = 1.0, r_mult = 0.5, b_mult = 2.0},    -- HARDCORE: Extremely volatile
-    {name = "HARDWARE", u_mult = 0.3, r_mult = 1.6, b_mult = 2.3}   -- HARDCORE: Capital hell
+    {name = "SAAS", u_mult = 0.8, r_mult = 1.5, b_mult = 1.0},      -- Balanced SaaS
+    {name = "AI", u_mult = 1.0, r_mult = 0.9, b_mult = 1.3},        -- Challenging but fair AI
+    {name = "SOCIAL", u_mult = 1.4, r_mult = 0.4, b_mult = 1.2},    -- Hard monetization
+    {name = "CRYPTO", u_mult = 1.1, r_mult = 0.7, b_mult = 1.5},    -- Volatile crypto
+    {name = "HARDWARE", u_mult = 0.5, r_mult = 1.8, b_mult = 1.8}   -- Capital intensive
 }
 
 niches = {
