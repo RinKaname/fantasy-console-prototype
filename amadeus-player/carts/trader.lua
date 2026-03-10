@@ -252,7 +252,7 @@ function _update()
         end
 
         if opt_payout > 0 then
-            news_ticker = "OPTIONS EXPIRED ITM! PAYOUT: $" .. to_fixed2(opt_payout)
+            news_ticker = "OPTIONS EXPIRED ITM! PAYOUT: " .. format_money(opt_payout)
             news_x = SCREEN_W
             sfx(3)
         else
@@ -274,10 +274,10 @@ function _update()
 
                 local y_str = tostring(math.floor(yield * 100))
                 if payout > 0 then
-                    news_ticker = "NEWS: " .. st.name .. " ISSUES " .. y_str .. "% DIVIDEND. YOU RECEIVED $" .. to_fixed2(payout) .. "!"
+                    news_ticker = "NEWS: " .. st.name .. " ISSUES " .. y_str .. "% DIVIDEND. YOU RECEIVED " .. format_money(payout) .. "!"
                     sfx(0) -- Blip (Good)
                 elseif payout < 0 then
-                    news_ticker = "NEWS: " .. st.name .. " ISSUES " .. y_str .. "% DIVIDEND. SHORT SELLERS PAY $" .. to_fixed2(math.abs(payout)) .. "!"
+                    news_ticker = "NEWS: " .. st.name .. " ISSUES " .. y_str .. "% DIVIDEND. SHORT SELLERS PAY " .. format_money(math.abs(payout)) .. "!"
                     sfx(1) -- Buzz (Bad)
                 else
                     news_ticker = "NEWS: " .. st.name .. " ISSUES " .. y_str .. "% DIVIDEND. YOU OWN 0 SHARES."
@@ -359,6 +359,23 @@ function to_fixed2(num)
     return tostring(int) .. "." .. tostring(dec)
 end
 
+function format_money(val)
+    local abs_v = math.abs(val)
+    local sign = val < 0 and "-" or ""
+
+    if abs_v >= 1000000000000 then
+        return sign .. "$" .. string.format("%.2f", abs_v / 1000000000000) .. "T"
+    elseif abs_v >= 1000000000 then
+        return sign .. "$" .. string.format("%.2f", abs_v / 1000000000) .. "B"
+    elseif abs_v >= 1000000 then
+        return sign .. "$" .. string.format("%.2f", abs_v / 1000000) .. "M"
+    elseif abs_v >= 1000 then
+        return sign .. "$" .. string.format("%.2f", abs_v / 1000) .. "K"
+    else
+        return sign .. "$" .. string.format("%.2f", abs_v)
+    end
+end
+
 function _draw()
     cls(C_BG)
 
@@ -410,8 +427,8 @@ function _draw()
 
     -- 2. Draw Terminal Interface (Bottom Half)
     print("PORTFOLIO", 10, 134, C_TEXT)
-    print("NET WORTH: $" .. to_fixed2(net_worth), 10, 144, C_HL)
-    print("CASH:      $" .. to_fixed2(cash), 10, 154, C_HL)
+    print("NET WORTH: " .. format_money(net_worth), 10, 144, C_HL)
+    print("CASH:      " .. format_money(cash), 10, 154, C_HL)
     print("ECONOMY:   " .. economy, 10, 164, C_HL)
 
     -- Draw Stock List
