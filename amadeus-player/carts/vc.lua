@@ -468,7 +468,7 @@ function _draw()
 
     local fund_title = "AMADEUS VENTURES - FUND " .. tostring(firm_state.fund_number)
     print(fund_title, 4, 4, C_HL)
-    print("MONTH: " .. tostring(fund.month) .. "/" .. tostring(fund.max_months), 180, 4, C_TEXT)
+    print("MONTH: " .. tostring(math.min(fund.month, fund.max_months)) .. "/" .. tostring(fund.max_months), 180, 4, C_TEXT)
 
     local mult = (fund.returned + fund.portfolio_val(portfolio)) / fund.total
     print("FUND CASH: $" .. string.format("%.2f", fund.cash) .. "M", 4, 16, C_HL)
@@ -601,8 +601,8 @@ function _draw()
                     if p and p.is_ma_offer then
                         print("Z: ACCEPT BUYOUT   X: REJECT", 10, 220, C_HL)
                     else
-                        print("ENTER: DUE DILIGENCE", 140, 220, C_DIM)
-                        print("Z: INVEST/FUND X: PASS", 10, 220, C_HL)
+                        print("ENTER: DD", 180, 220, C_DIM)
+                        print("Z: INVEST  X: PASS", 10, 220, C_HL)
                     end
                 else
                     print("X: ADVANCE 1 MONTH", 10, 220, C_HL)
@@ -611,6 +611,7 @@ function _draw()
                 if #portfolio > 0 then
                     local p = portfolio[selected_idx]
                     if p and p.runway <= 5 then
+                        print("ENTER: DD", 180, 220, C_DIM)
                         print("Z: REPLACE CEO ($0.1M)", 10, 220, C_HL)
                     else
                         print("ENTER: DUE DILIGENCE", 10, 220, C_TEXT)
