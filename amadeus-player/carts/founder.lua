@@ -27,8 +27,8 @@ metrics = {
     quality = 0.9, -- Standard: Decent starting code quality
     hype = 0.9,    -- Standard: Reasonable starting hype
     month = 1,
-    ap = 3,        -- User request: start with 3 AP
-    max_ap = 3,    -- User request: start with 3 AP
+    ap = 3,
+    max_ap = 3,
     valuation = 50000,  -- Standard: Fair starting valuation
     devs = 0,
     sales = 0,
@@ -108,7 +108,7 @@ function calc_valuation()
     -- HARDCORE: Brutally realistic VC logic - Revenue is KING, users mean nothing without monetization
     -- Late stage investors punish vanity metrics EXTREMELY hard
     local rev_val = (metrics.mrr * 12) * 6  -- HARDCORE: Reduced multiple from 8x to 6x
-
+    
     -- User value gets MASSIVE penalty at scale without revenue
     local user_val = 0
     if metrics.mrr > 0 then
@@ -125,10 +125,10 @@ function calc_valuation()
     else
         user_val = metrics.users * 0.02  -- HARDCORE: No revenue = almost worthless
     end
-
+    
     local base = rev_val + user_val
     if base < 30000 then base = 30000 end  -- HARDCORE: Lower floor
-
+    
     -- Hype multiplier capped lower, quality matters more, pivot penalty
     local pivot_penalty = math.pow(0.8, metrics.pivot_count)  -- Each pivot reduces val by 20%
     local hype_cap = metrics.pmf_score > 0.7 and 1.8 or 1.3  -- HARDCORE: Lower caps
@@ -137,27 +137,27 @@ end
 
 function advance_month()
     metrics.month = metrics.month + 1
-    -- HARDCORE: Devs increase max_ap capacity slower
-    metrics.max_ap = 3 + math.floor(metrics.devs / 3)  -- User request: base 3
+    -- Devs increase max_ap capacity (start with 3, +1 per 2 devs)
+    metrics.max_ap = 3 + math.floor(metrics.devs / 2)
     metrics.ap = metrics.max_ap -- Reset to full AP at month start
-
+    
     -- HARDCORE: Competitors get MUCH stronger over time (especially in AI/Crypto)
     if startup.sector == "AI" or startup.sector == "CRYPTO" then
         metrics.competitor_strength = metrics.competitor_strength + 0.12  -- Increased from 0.08
     else
         metrics.competitor_strength = metrics.competitor_strength + 0.05  -- Increased from 0.03
     end
-
+    
     -- HARDCORE: Feature debt accumulates if you don't build enough
     if metrics.feature_debt > 0 then
         metrics.quality = metrics.quality - (metrics.feature_debt * 0.02)
         if metrics.quality < 0.1 then metrics.quality = 0.1 end
         metrics.feature_debt = math.max(0, metrics.feature_debt - 1)
     end
-
+    
     -- Market saturation: harder to grow as you capture more market share
     local saturation_penalty = metrics.market_share * 0.7  -- HARDCORE: 70% reduction at 100% share (was 50%)
-
+    
     -- Server Costs (AWS Bill scales FASTER with users: approx $800 per 10k users)
     local server_cost = math.floor((metrics.users / 10000) * 800)  -- Increased from $500
     local total_burn = metrics.burn + server_cost
@@ -190,12 +190,12 @@ function advance_month()
 
     metrics.users = math.floor(metrics.users - churn + viral)
     if metrics.users < 0 then metrics.users = 0 end
-
+    
     -- Update market share
     if metrics.market_size > 0 then
         metrics.market_share = metrics.users / metrics.market_size
     end
-
+    
     -- HARDCORE: Hype decays faster if PMF is low or quality is poor
     local hype_decay = (metrics.pmf_score < 0.5 and 0.20 or 0.12) + (metrics.quality < 0.5 and 0.05 or 0)
     if metrics.hype > 1.0 then
@@ -513,9 +513,9 @@ function _draw()
     print("MONTH: " .. tostring(metrics.month), 200, 4, C_TEXT)
 
     print("CASH: " .. format_money(metrics.cash), 4, 16, C_GOOD)
-
+    
     -- Calculate server cost for display
-    local server_cost = math.floor((metrics.users / 10000) * 800)
+    local server_cost = math.floor((metrics.users / 10000) * 500)
     print("BURN: " .. format_money(metrics.burn) .. "+" .. format_money(server_cost) .. "/MO", 4, 26, C_WARN)
 
     print("USERS: " .. format_num(metrics.users), 120, 16, C_ACCENT)
@@ -525,7 +525,7 @@ function _draw()
 
     print("VALUATION: " .. format_money(metrics.valuation), 4, 42, C_HL)
     print("EQUITY: " .. string.format("%.1f%%", metrics.equity * 100), 4, 52, C_TEXT)
-
+    
     -- Calculate runway including MRR
     local net_burn = metrics.burn - metrics.mrr
     local runway = net_burn > 0 and (metrics.cash / net_burn) or 99.9
@@ -536,6 +536,11 @@ function _draw()
     -- MIDDLE: Action Menu
     print("ACTION POINTS: " .. tostring(metrics.ap) .. " / " .. tostring(metrics.max_ap), 4, 70, C_HL)
     draw_progress(4, 80, 100, metrics.ap, metrics.max_ap, C_ACCENT)
+    
+    -- Show PMF score and competitor strength
+    local pmf_col = metrics.pmf_score < 0.5 and C_WARN or (metrics.pmf_score < 0.8 and C_TEXT or C_GOOD)
+    print("PMF: " .. string.format("%.0f%%", metrics.pmf_score * 100), 150, 70, pmf_col)
+    print("COMP: " .. string.format("%.1fx", metrics.competitor_strength), 200, 70, C_WARN)
 
     -- Show PMF score and competitor strength
     local pmf_col = metrics.pmf_score < 0.5 and C_WARN or (metrics.pmf_score < 0.8 and C_TEXT or C_GOOD)
