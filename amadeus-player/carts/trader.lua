@@ -33,6 +33,10 @@ end
 selected_stock = 1
 multiplier = 1 -- Can be 1, 10, or 100
 tx_fee = 5.00  -- Brokerage fee per transaction
+trade_mode = "SHARES" -- "SHARES", "CALLS", "PUTS"
+
+-- Active Options Contracts
+options = {}
 
 -- Economy States: STABLE, BOOM, BUST
 economy = "STABLE"
@@ -156,68 +160,131 @@ function _update()
         sfx(2)
     end
 
+    -- Trade Mode Toggle (Enter = 6)
+    if just_pressed(6) then
+        if trade_mode == "SHARES" then trade_mode = "CALLS"
+        elseif trade_mode == "CALLS" then trade_mode = "PUTS"
+        else trade_mode = "SHARES" end
+        sfx(2)
+    end
+
     local s = stocks[selected_stock]
 
-    -- Buy/Cover (Z = 4)
+    -- Buy (Z = 4)
     if just_pressed(4) then
-        local cost = (s.price * multiplier) + tx_fee
-        if cash >= cost then
-            cash = cash - cost
-            s.owned = s.owned + multiplier
-            sfx(0) -- UI Blip
+        if trade_mode == "SHARES" then
+            local cost = (s.price * multiplier) + tx_fee
+            if cash >= cost then
+                cash = cash - cost
+                s.owned = s.owned + multiplier
+                sfx(0) -- UI Blip
+            else
+                sfx(1) -- Error Buzz (insufficient funds)
+            end
         else
-            sfx(1) -- Error Buzz (insufficient funds)
+            -- Buying Options (Calls or Puts)
+            -- 1 Contract = 100 Shares. Premium is 5% of current share price per share.
+            local premium = (s.price * 0.05 * 100 * multiplier) + tx_fee
+
+            if #options >= 4 then
+                sfx(1) -- Max 4 options contracts allowed at once (UI constraint)
+            elseif cash >= premium then
+                cash = cash - premium
+                table.insert(options, {
+                    type = trade_mode,
+                    stock_idx = selected_stock,
+                    strike = s.price,
+                    qty = multiplier,
+                    days_left = 7
+                })
+                sfx(0)
+            else
+                sfx(1)
+            end
         end
     end
 
-    -- Sell/Short (X = 5)
-    -- You can short sell as long as your total net worth is greater than the value
-    -- of the shares you are trying to short (a simple 1:1 margin requirement).
+    -- Sell (X = 5)
     if just_pressed(5) then
-        local short_value = (s.price * multiplier) + tx_fee
-        -- If we already own shares, we can just sell them.
-        -- If we are going negative (shorting), we must have enough net worth to cover the risk.
-        if s.owned >= multiplier or net_worth > short_value then
-            local revenue = (s.price * multiplier) - tx_fee
-            cash = cash + revenue
-            s.owned = s.owned - multiplier
-            sfx(0) -- UI Blip
+        if trade_mode == "SHARES" then
+            local short_value = (s.price * multiplier) + tx_fee
+            -- If we already own shares, we can just sell them.
+            -- If we are going negative (shorting), we must have enough net worth to cover the risk.
+            if s.owned >= multiplier or net_worth > short_value then
+                local revenue = (s.price * multiplier) - tx_fee
+                cash = cash + revenue
+                s.owned = s.owned - multiplier
+                sfx(0) -- UI Blip
+            else
+                sfx(1) -- Error Buzz (margin call / insufficient net worth)
+            end
         else
-            sfx(1) -- Error Buzz (margin call / insufficient net worth)
+            -- Cannot short options in this simple version, so X does nothing for options
+            sfx(1)
         end
     end
 
     -- Process daily events every 180 frames (approx 3 seconds = 1 day)
     if ticks % 180 == 0 then
         days = days + 1
-        -- 5% chance per day for a random stock to issue a dividend
-        if random_float() < 0.05 then
-            local s_idx = math.floor(random_float() * 3) + 1
-            local st = stocks[s_idx]
-            local yield = 0.02 + (random_float() * 0.04) -- 2% to 6% yield
 
-            local payout = 0
-            if st.owned > 0 then
-                payout = st.owned * (st.price * yield)
-                cash = cash + payout
-            elseif st.owned < 0 then
-                -- If shorting, you owe the dividend!
-                payout = st.owned * (st.price * yield)
-                cash = cash + payout -- payout is negative, subtracts cash
-            end
+        -- Process Options Expirations
+        local opt_payout = 0
+        for i = #options, 1, -1 do
+            local opt = options[i]
+            opt.days_left = opt.days_left - 1
+            if opt.days_left <= 0 then
+                local st = stocks[opt.stock_idx]
+                local payoff = 0
 
-            local y_str = tostring(math.floor(yield * 100))
-            if payout > 0 then
-                news_ticker = "NEWS: " .. st.name .. " ISSUES " .. y_str .. "% DIVIDEND. YOU RECEIVED $" .. to_fixed2(payout) .. "!"
-                sfx(0) -- Blip (Good)
-            elseif payout < 0 then
-                news_ticker = "NEWS: " .. st.name .. " ISSUES " .. y_str .. "% DIVIDEND. SHORT SELLERS PAY $" .. to_fixed2(math.abs(payout)) .. "!"
-                sfx(1) -- Buzz (Bad)
-            else
-                news_ticker = "NEWS: " .. st.name .. " ISSUES " .. y_str .. "% DIVIDEND. YOU OWN 0 SHARES."
-                sfx(2) -- Click
+                if opt.type == "CALLS" then
+                    payoff = math.max(0, st.price - opt.strike) * 100 * opt.qty
+                elseif opt.type == "PUTS" then
+                    payoff = math.max(0, opt.strike - st.price) * 100 * opt.qty
+                end
+
+                if payoff > 0 then
+                    cash = cash + payoff
+                    opt_payout = opt_payout + payoff
+                end
+                table.remove(options, i)
             end
+        end
+
+        if opt_payout > 0 then
+            news_ticker = "OPTIONS EXPIRED ITM! PAYOUT: $" .. to_fixed2(opt_payout)
             news_x = SCREEN_W
+            sfx(3)
+        else
+            -- 5% chance per day for a random stock to issue a dividend
+            if random_float() < 0.05 then
+                local s_idx = math.floor(random_float() * 3) + 1
+                local st = stocks[s_idx]
+                local yield = 0.02 + (random_float() * 0.04) -- 2% to 6% yield
+
+                local payout = 0
+                if st.owned > 0 then
+                    payout = st.owned * (st.price * yield)
+                    cash = cash + payout
+                elseif st.owned < 0 then
+                    -- If shorting, you owe the dividend!
+                    payout = st.owned * (st.price * yield)
+                    cash = cash + payout -- payout is negative, subtracts cash
+                end
+
+                local y_str = tostring(math.floor(yield * 100))
+                if payout > 0 then
+                    news_ticker = "NEWS: " .. st.name .. " ISSUES " .. y_str .. "% DIVIDEND. YOU RECEIVED $" .. to_fixed2(payout) .. "!"
+                    sfx(0) -- Blip (Good)
+                elseif payout < 0 then
+                    news_ticker = "NEWS: " .. st.name .. " ISSUES " .. y_str .. "% DIVIDEND. SHORT SELLERS PAY $" .. to_fixed2(math.abs(payout)) .. "!"
+                    sfx(1) -- Buzz (Bad)
+                else
+                    news_ticker = "NEWS: " .. st.name .. " ISSUES " .. y_str .. "% DIVIDEND. YOU OWN 0 SHARES."
+                    sfx(2) -- Click
+                end
+                news_x = SCREEN_W
+            end
         end
     end
 
@@ -369,9 +436,24 @@ function _draw()
 
     -- Draw Controls
     print("QTY: x" .. tostring(multiplier), 10, 184, C_HL)
-    print("Z: BUY", 10, 194, C_TEXT)
+    local z_text = trade_mode == "SHARES" and "Z: BUY" or "Z: BUY " .. trade_mode
+    print(z_text, 10, 194, C_TEXT)
     print("X: SELL", 10, 204, C_TEXT)
-    print("FEE: $" .. to_fixed2(tx_fee), 10, 214, C_GRID)
+
+    local mode_col = trade_mode == "SHARES" and C_GRID or C_HL
+    print("MODE: " .. trade_mode, 10, 214, mode_col)
+
+    -- Draw Active Options
+    if #options > 0 then
+        print("ACTIVE OPTIONS", 130, 184, C_TEXT)
+        for i = 1, #options do
+            local opt = options[i]
+            local st_name = stocks[opt.stock_idx].name
+            local opt_type = opt.type == "CALLS" and "C" or "P"
+            local str = st_name .. " " .. tostring(math.floor(opt.strike)) .. opt_type .. " x" .. tostring(opt.qty) .. " [" .. tostring(opt.days_left) .. "D]"
+            print(str, 130, 184 + (i * 10), C_HL)
+        end
+    end
 
     -- Draw Ticker Border
     draw_line(0, 220, SCREEN_W, 220, C_GRID)
